@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teilenummer.Service – Die richtige Kfz-Ersatzteilnummer, garantiert</title>
+<meta name="description" content="Falsches Teil bestellt, keine Lust auf Rätselraten? Schick FIN, Foto und Problem – wir liefern dir die passende Teilenummer.">
+<style>
+  :root{
+    --bg:#0f1115; --bg-alt:#161923; --card:#1b1f2b; --border:#2a2f3d;
+    --text:#eef0f4; --text-dim:#a4abbd; --accent:#ff6a1a; --accent-dark:#e35a10;
+    --ok:#3ecf8e; --radius:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.5;}
+  a{color:var(--accent);}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px;}
+  header.hero{padding:56px 0 40px;text-align:center;background:
+    radial-gradient(circle at 50% 0%, rgba(255,106,26,0.18), transparent 60%);}
+  .logo{font-weight:800;font-size:22px;letter-spacing:.5px;}
+  .logo span{color:var(--accent);}
+  h1{font-size:clamp(28px,5vw,42px);margin:18px 0 10px;line-height:1.15;}
+  .hero p.sub{color:var(--text-dim);font-size:18px;max-width:600px;margin:0 auto 28px;}
+  .cta-btn{display:inline-block;background:var(--accent);color:#111;font-weight:700;
+    padding:14px 30px;border-radius:999px;text-decoration:none;font-size:17px;
+    border:none;cursor:pointer;transition:background .15s;}
+  .cta-btn:hover{background:var(--accent-dark);}
+  section{padding:48px 0;border-top:1px solid var(--border);}
+  h2{font-size:26px;margin-bottom:6px;}
+  .lead{color:var(--text-dim);margin-bottom:28px;}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .step{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
+  .step .num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
+    border-radius:50%;background:var(--accent);color:#111;font-weight:800;margin-bottom:12px;}
+  .step h3{margin:0 0 6px;font-size:17px;}
+  .step p{margin:0;color:var(--text-dim);font-size:14.5px;}
+  .pricing{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .plan{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:24px 20px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s;}
+  .plan:hover{transform:translateY(-2px);}
+  .plan.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .plan input{position:absolute;top:18px;right:18px;width:18px;height:18px;accent-color:var(--accent);}
+  .plan .badge{display:inline-block;font-size:11.5px;font-weight:700;color:var(--accent);
+    text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+  .plan h3{margin:0 0 4px;font-size:20px;}
+  .plan .price{font-size:30px;font-weight:800;margin:6px 0 14px;}
+  .plan .price small{font-size:14px;font-weight:500;color:var(--text-dim);}
+  .plan ul{margin:0;padding-left:18px;color:var(--text-dim);font-size:14px;}
+  .plan ul li{margin-bottom:6px;}
+  .plan.featured{border-color:var(--accent);}
+  .plan .flag{position:absolute;top:-10px;left:20px;background:var(--accent);color:#111;
+    font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;}
+
+  form#reqform{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;}
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:14px;font-weight:600;margin-bottom:6px;}
+  .field .hint{font-weight:400;color:var(--text-dim);font-size:12.5px;}
+  .field input[type=text],.field input[type=email],.field input[type=tel],.field input[type=number],.field textarea{
+    width:100%;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:11px 13px;font-size:15px;font-family:inherit;}
+  .field textarea{min-height:90px;resize:vertical;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .file-drop{border:1.5px dashed var(--border);border-radius:10px;padding:18px;text-align:center;
+    color:var(--text-dim);font-size:14px;cursor:pointer;}
+  .file-drop.has-files{border-color:var(--ok);color:var(--ok);}
+  #photoInput{display:none;}
+  .disclaimer{font-size:12.5px;color:var(--text-dim);background:var(--bg-alt);border-radius:8px;
+    padding:12px 14px;margin:20px 0;}
+  .selected-plan-bar{display:flex;justify-content:space-between;align-items:center;
+    background:var(--bg-alt);border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:14.5px;}
+  .selected-plan-bar strong{font-size:17px;}
+  #stage2{display:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:28px;text-align:center;}
+  #stage2 .sum{font-size:18px;margin-bottom:22px;}
+  #paypal-btn-container{max-width:380px;margin:0 auto;}
+  .back-link{display:inline-block;margin-top:16px;font-size:14px;color:var(--text-dim);cursor:pointer;}
+  #confirmation{display:none;background:var(--card);border:1px solid var(--ok);border-radius:var(--radius);
+    padding:28px;text-align:center;}
+  #confirmation h3{color:var(--ok);}
+  #errorBox{display:none;background:#3a1a1a;border:1px solid #a33;color:#ffb4b4;border-radius:8px;
+    padding:12px 14px;margin-bottom:16px;font-size:14px;}
+  footer{padding:36px 0;text-align:center;color:var(--text-dim);font-size:13px;}
+  footer a{color:var(--text-dim);margin:0 8px;}
+  @media (max-width:760px){
+    .steps,.pricing,.grid2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="logo">Teilenummer<span>.Service</span></div>
+    <h1>Falsches Teil bestellt kostet Zeit &amp; Geld.<br>Wir sagen dir vorher, welches richtig ist.</h1>
+    <p class="sub">FIN, Foto und kurze Problembeschreibung schicken – du bekommst die passende OEM-Teilenummer, Suchbegriffe und Bezugsquellen. Von jemandem, der täglich mit Kfz-Ersatzteilen arbeitet.</p>
+    <a href="#anfrage" class="cta-btn">Jetzt Teilenummer anfragen</a>
+  </div>
+</header>
+
+<section id="ablauf">
+  <div class="wrap">
+    <h2>So läuft's ab</h2>
+    <p class="lead">Drei Schritte, keine Registrierung, keine Warteschleife.</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>Angaben schicken</h3>
+        <p>Fahrzeugdaten, FIN, Foto vom Teil/Defekt und kurze Beschreibung im Formular unten.</p></div>
+      <div class="step"><div class="num">2</div><h3>Paket wählen &amp; zahlen</h3>
+        <p>Sicher per PayPal direkt auf dieser Seite. Kein Vorkasse-Risiko für dich, sofortige Bearbeitung für uns.</p></div>
+      <div class="step"><div class="num">3</div><h3>Antwort erhalten</h3>
+        <p>Teilenummer-Einschätzung, Suchbegriffe und Hinweise per E-Mail bzw. WhatsApp – je nach gewähltem Paket.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="pakete">
+  <div class="wrap">
+    <h2>Pakete</h2>
+    <p class="lead">Wähle direkt hier dein Paket – die Auswahl wird unten ins Formular übernommen.</p>
+    <div class="pricing" id="pricingCards">
+      <label class="plan" data-plan="basis" data-price="5.99">
+        <input type="radio" name="planRadio" value="basis">
+        <span class="badge">Basis</span>
+        <h3>Basis</h3>
+        <div class="price">5,99&nbsp;€ <small>Antwort in 24h</small></div>
+        <ul>
+          <li>Teilenummer-Einschätzung</li>
+          <li>Passende Suchbegriffe</li>
+          <li>Hinweise zur Bezugsquelle</li>
+        </ul>
+      </label>
+      <label class="plan featured" data-plan="express" data-price="10.99">
+        <div class="flag">Beliebt</div>
+        <input type="radio" name="planRadio" value="express">
+        <span class="badge">Express</span>
+        <h3>Express</h3>
+        <div class="price">10,99&nbsp;€ <small>Antwort in 1–2h</small></div>
+        <ul>
+          <li>Alles aus Basis</li>
+          <li>Alternativ-/Zubehörteile</li>
+          <li>Passende Dichtungen &amp; Schrauben</li>
+          <li>Direkte Linkvorschläge</li>
+        </ul>
+      </label>
+      <label class="plan" data-plan="premium" data-price="19.99">
+        <input type="radio" name="planRadio" value="premium">
+        <span class="badge">Premium</span>
+        <h3>Premium</h3>
+        <div class="price">19,99&nbsp;€ <small>ausführlichste Antwort</small></div>
+        <ul>
+          <li>Alles aus Express</li>
+          <li>Einordnung des Fehlerbilds</li>
+          <li>Reparaturhinweise</li>
+          <li>„Was zuerst prüfen“-Reihenfolge</li>
+        </ul>
+      </label>
+    </div>
+  </div>
+</section>
+
+<section id="anfrage">
+  <div class="wrap">
+    <h2>Anfrage stellen</h2>
+    <p class="lead">Je genauer die Angaben, desto genauer die Antwort.</p>
+
+    <div id="errorBox"></div>
+
+    <form id="reqform">
+      <div id="stage1">
+        <div class="field">
+          <label>Ausgewähltes Paket</label>
+          <div class="selected-plan-bar">
+            <span id="planNameDisplay">Noch kein Paket gewählt</span>
+            <strong id="planPriceDisplay">–</strong>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Name *</label>
+            <input type="text" id="f_name" required>
+          </div>
+          <div class="field">
+            <label>E-Mail *</label>
+            <input type="email" id="f_email" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>WhatsApp / Telefon <span class="hint">(optional, für schnellere Rückfragen)</span></label>
+          <input type="tel" id="f_phone">
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Fahrzeug-Modell *</label>
+            <input type="text" id="f_model" placeholder="z.B. Audi A6 C7 Avant" required>
+          </div>
+          <div class="field">
+            <label>Baujahr *</label>
+            <input type="text" id="f_year" required>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>FIN / Fahrgestellnummer *</label>
+            <input type="text" id="f_vin" maxlength="17" style="text-transform:uppercase" required>
+          </div>
+          <div class="field">
+            <label>Motor <span class="hint">(falls bekannt)</span></label>
+            <input type="text" id="f_engine" placeholder="z.B. 3.0 TDI, CRTC">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Gesuchtes Teil / Problembeschreibung *</label>
+          <textarea id="f_problem" placeholder="Was ist defekt, welches Teil suchst du, was hast du schon geprüft?" required></textarea>
+        </div>
+
+        <div class="field">
+          <label>Foto(s) * <span class="hint">(defektes Teil, betroffene Stelle o.ä. – max. 3 Fotos)</span></label>
+          <div class="file-drop" id="fileDrop">📷 Fotos auswählen</div>
+          <input type="file" id="photoInput" accept="image/*" multiple>
+        </div>
+
+        <div class="disclaimer">
+          Die Auskunft erfolgt nach bestem Wissen anhand deiner Angaben, ohne Gewähr. Sie ersetzt keine Prüfung durch eine Fachwerkstatt und ist keine Einbau-/Reparaturanleitung.
+        </div>
+
+        <button type="button" id="toStage2" class="cta-btn" style="width:100%">Weiter zur Zahlung</button>
+      </div>
+
+      <div id="stage2">
+        <div class="sum">Paket <strong id="s2plan"></strong> — <strong id="s2price"></strong></div>
+        <div id="paypal-btn-container"></div>
+        <div class="back-link" id="backToForm">← zurück zum Formular</div>
+      </div>
+    </form>
+
+    <div id="confirmation">
+      <h3>✅ Zahlung erhalten, Anfrage ist bei uns eingegangen</h3>
+      <p id="confirmText"></p>
+      <p style="color:var(--text-dim);font-size:13px">
+        Bitte diese Seite als Beleg speichern (Screenshot). Falls du innerhalb der Frist nichts hörst,
+        melde dich mit deiner Transaktions-ID per E-Mail oder WhatsApp bei uns.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Teilenummer.Service — Dominic Pfaue</div>
+    <div><a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · <a href="mailto:teilenummer.service@gmail.com">teilenummer.service@gmail.com</a></div>
+  </div>
+</footer>
+
+<script src="https://www.paypal.com/sdk/js?client-id=DEINE_PAYPAL_CLIENT_ID&currency=EUR"></script>
+<script>
+/* ============ KONFIGURATION – hier eintragen ============ */
+const APPS_SCRIPT_URL = "DEINE_APPS_SCRIPT_WEB_APP_URL"; // .../exec URL nach Deployment
+/* =========================================================== */
+
+const PLAN_LABELS = { basis: "Basis (24h)", express: "Express (1–2h)", premium: "Premium" };
+let selectedPlan = null;
+let photoDataUrls = [];
+
+// --- Paketwahl ---
+document.querySelectorAll('.plan').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.plan').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    card.querySelector('input[type=radio]').checked = true;
+    selectedPlan = { key: card.dataset.plan, price: card.dataset.price };
+    document.getElementById('planNameDisplay').textContent = PLAN_LABELS[selectedPlan.key];
+    document.getElementById('planPriceDisplay').textContent = selectedPlan.price.replace('.', ',') + ' €';
+  });
+});
+
+// --- Foto-Upload mit Client-seitiger Komprimierung ---
+const fileDrop = document.getElementById('fileDrop');
+const photoInput = document.getElementById('photoInput');
+fileDrop.addEventListener('click', () => photoInput.click());
+
+photoInput.addEventListener('change', async () => {
+  const files = Array.from(photoInput.files).slice(0, 3);
+  photoDataUrls = [];
+  fileDrop.textContent = 'Fotos werden verarbeitet...';
+  for (const file of files) {
+    const compressed = await compressImage(file, 1400, 0.72);
+    photoDataUrls.push(compressed);
+  }
+  fileDrop.textContent = `✅ ${photoDataUrls.length} Foto(s) ausgewählt`;
+  fileDrop.classList.add('has-files');
+});
+
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// --- Validierung + Stage-Wechsel ---
+const form = document.getElementById('reqform');
+const errorBox = document.getElementById('errorBox');
+
+document.getElementById('toStage2').addEventListener('click', () => {
+  errorBox.style.display = 'none';
+  if (!selectedPlan) return showError('Bitte zuerst oben ein Paket auswählen.');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  if (photoDataUrls.length === 0) return showError('Bitte mindestens ein Foto hochladen.');
+
+  document.getElementById('stage1').style.display = 'none';
+  document.getElementById('stage2').style.display = 'block';
+  document.getElementById('s2plan').textContent = PLAN_LABELS[selectedPlan.key];
+  document.getElementById('s2price').textContent = selectedPlan.price.replace('.', ',') + ' €';
+  renderPaypalButton();
+});
+
+document.getElementById('backToForm').addEventListener('click', () => {
+  document.getElementById('stage2').style.display = 'none';
+  document.getElementById('stage1').style.display = 'block';
+  document.getElementById('paypal-btn-container').innerHTML = '';
+});
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
+  errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// --- PayPal Button ---
+let paypalRendered = false;
+function renderPaypalButton() {
+  if (paypalRendered) return;
+  paypalRendered = true;
+  paypal.Buttons({
+    style: { layout: 'vertical', color: 'gold', shape: 'pill', label: 'pay' },
+    createOrder: (data, actions) => actions.order.create({
+      purchase_units: [{
+        amount: { value: selectedPlan.price, currency_code: 'EUR' },
+        description: 'Teilenummer.Service – Paket ' + PLAN_LABELS[selectedPlan.key]
+      }]
+    }),
+    onApprove: async (data, actions) => {
+      const order = await actions.order.capture();
+      await submitRequest(order);
+    },
+    onError: (err) => {
+      console.error(err);
+      showError('Bei der Zahlung ist ein Fehler aufgetreten. Bitte versuch es erneut.');
+    }
+  }).render('#paypal-btn-container');
+}
+
+// --- Übermittlung ans Backend (Google Apps Script) ---
+async function submitRequest(order) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    plan: selectedPlan.key,
+    price: selectedPlan.price,
+    name: document.getElementById('f_name').value,
+    email: document.getElementById('f_email').value,
+    phone: document.getElementById('f_phone').value,
+    model: document.getElementById('f_model').value,
+    year: document.getElementById('f_year').value,
+    vin: document.getElementById('f_vin').value,
+    engine: document.getElementById('f_engine').value,
+    problem: document.getElementById('f_problem').value,
+    photos: photoDataUrls,
+    paypalOrderId: order.id,
+    paypalPayerEmail: (order.payer && order.payer.email_address) || ''
+  };
+
+  try {
+    // no-cors: Apps Script sendet keine CORS-Header zurück, wir können die Antwort
+    // nicht lesen, aber der Request kommt an und wird serverseitig verarbeitet.
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.error('Übertragung an Backend fehlgeschlagen', e);
+  }
+
+  document.getElementById('stage2').style.display = 'none';
+  document.getElementById('confirmation').style.display = 'block';
+  document.getElementById('confirmText').innerHTML =
+    `Paket <strong>${PLAN_LABELS[selectedPlan.key]}</strong> · Transaktions-ID: <strong>${order.id}</strong><br>` +
+    `Antwort geht an ${payload.email}${payload.phone ? ' bzw. per WhatsApp an ' + payload.phone : ''}.`;
+  document.getElementById('confirmation').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>

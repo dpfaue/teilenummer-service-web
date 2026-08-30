@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verwaltung – Teilenummer.Service</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  :root{
+    --bg:#0f1115; --bg-alt:#161923; --card:#1b1f2b; --border:#2a2f3d;
+    --text:#eef0f4; --text-dim:#a4abbd; --accent:#ff6a1a; --accent-dark:#e35a10;
+    --ok:#3ecf8e; --warn:#f5c451; --radius:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.5;}
+  a{color:var(--accent);}
+  .wrap{max-width:920px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .muted{color:var(--text-dim);font-size:13.5px;}
+
+  /* Login-Gate */
+  #gate{max-width:360px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:28px;text-align:center;}
+  #gate input{width:100%;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:11px 13px;font-size:15px;margin:14px 0;}
+  #gate button, .btn{background:var(--accent);color:#111;font-weight:700;border:none;border-radius:8px;
+    padding:11px 18px;font-size:14.5px;cursor:pointer;}
+  #gate button:hover, .btn:hover{background:var(--accent-dark);}
+  #gateError{color:#ff8a8a;font-size:13px;min-height:18px;}
+
+  /* App */
+  #app{display:none;}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0 26px;}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+  .stat .val{font-size:24px;font-weight:800;}
+  .stat .lbl{color:var(--text-dim);font-size:12.5px;}
+
+  .filters{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .filters button{background:var(--card);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 14px;border-radius:999px;font-size:13.5px;cursor:pointer;}
+  .filters button.active{background:var(--accent);color:#111;border-color:var(--accent);font-weight:700;}
+  #reload{margin-left:auto;background:none;border:1px solid var(--border);color:var(--text-dim);
+    border-radius:999px;padding:7px 14px;font-size:13.5px;cursor:pointer;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px;margin-bottom:16px;}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+  .card-top h3{margin:0 0 2px;font-size:17px;}
+  .status-pill{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;
+    padding:4px 10px;border-radius:999px;white-space:nowrap;}
+  .status-offen{background:rgba(245,196,81,.15);color:var(--warn);}
+  .status-beantwortet{background:rgba(62,207,142,.15);color:var(--ok);}
+  .status-in-bearbeitung{background:rgba(164,171,189,.15);color:var(--text-dim);}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:13.5px;margin:14px 0;color:var(--text-dim);}
+  .kv b{color:var(--text);}
+  .problem-box{background:var(--bg-alt);border-radius:8px;padding:12px 14px;font-size:14px;margin:10px 0;}
+  .photos{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;}
+  .photos a{font-size:12.5px;background:var(--bg-alt);padding:5px 10px;border-radius:6px;text-decoration:none;}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .actions button{background:var(--bg-alt);border:1px solid var(--border);color:var(--text);
+    padding:8px 14px;border-radius:8px;font-size:13.5px;cursor:pointer;}
+  .actions button:hover{border-color:var(--accent);}
+  .reply-box{display:none;margin-top:14px;}
+  .reply-box textarea{width:100%;min-height:100px;background:var(--bg-alt);border:1px solid var(--border);
+    border-radius:8px;color:var(--text);padding:11px 13px;font-size:14px;font-family:inherit;}
+  .reply-existing{margin-top:10px;font-size:13px;color:var(--text-dim);border-left:2px solid var(--ok);
+    padding-left:10px;}
+  .empty{color:var(--text-dim);text-align:center;padding:40px 0;}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1>Verwaltung</h1>
+  <p class="muted">Zugangsschlüssel eingeben</p>
+  <input type="password" id="keyInput" placeholder="Admin-Schlüssel">
+  <button onclick="login()">Anmelden</button>
+  <div id="gateError"></div>
+</div>
+
+<div class="wrap" id="app">
+  <h1>Teilenummer.Service — Anfragen</h1>
+  <p class="muted">Nicht öffentlich verlinkt. Diese Seite bitte nicht teilen.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="val" id="statOpen">–</div><div class="lbl">offene Anfragen</div></div>
+    <div class="stat"><div class="val" id="statCount">–</div><div class="lbl">Anfragen gesamt</div></div>
+    <div class="stat"><div class="val" id="statRevenue">–</div><div class="lbl">Umsatz gesamt (bezahlt)</div></div>
+  </div>
+
+  <div class="filters">
+    <button class="active" data-f="alle" onclick="setFilter('alle')">Alle</button>
+    <button data-f="offen" onclick="setFilter('offen')">Offen</button>
+    <button data-f="in Bearbeitung" onclick="setFilter('in Bearbeitung')">In Bearbeitung</button>
+    <button data-f="beantwortet" onclick="setFilter('beantwortet')">Beantwortet</button>
+    <button id="reload" onclick="loadList()">↻ Aktualisieren</button>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script>
+const APPS_SCRIPT_URL = "DEINE_APPS_SCRIPT_WEB_APP_URL"; // gleiche .../exec URL wie in index.html
+
+let adminKey = localStorage.getItem('tns_admin_key') || '';
+let allRows = [];
+let currentFilter = 'alle';
+
+function jsonp(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Math.random().toString(36).slice(2);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    const script = document.createElement('script');
+    const qs = new URLSearchParams({ ...params, admin: '1', key: adminKey, callback: cbName });
+    script.src = APPS_SCRIPT_URL + '?' + qs.toString();
+    script.onerror = () => { cleanup(); reject(new Error('Netzwerkfehler')); };
+    function cleanup() { delete window[cbName]; script.remove(); }
+    document.body.appendChild(script);
+    setTimeout(() => { if (window[cbName]) { cleanup(); reject(new Error('Zeitüberschreitung')); } }, 15000);
+  });
+}
+
+async function login() {
+  const val = document.getElementById('keyInput').value.trim();
+  if (!val) return;
+  adminKey = val;
+  document.getElementById('gateError').textContent = 'Prüfe...';
+  try {
+    const res = await jsonp({ action: 'list' });
+    if (!res.ok) {
+      document.getElementById('gateError').textContent = 'Falscher Schlüssel.';
+      adminKey = '';
+      return;
+    }
+    localStorage.setItem('tns_admin_key', val);
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    renderRows(res.rows);
+  } catch (e) {
+    document.getElementById('gateError').textContent = 'Fehler: ' + e.message;
+  }
+}
+
+async function loadList() {
+  try {
+    const res = await jsonp({ action: 'list' });
+    if (!res.ok) { alert('Fehler: ' + res.error); return; }
+    renderRows(res.rows);
+  } catch (e) {
+    alert('Netzwerkfehler beim Laden: ' + e.message);
+  }
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filters button[data-f]').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+  renderList();
+}
+
+function renderRows(rows) {
+  allRows = rows;
+  renderList();
+}
+
+function fmtDate(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function statusClass(s) {
+  return 'status-' + (s || 'offen').replace(/\s+/g, '-');
+}
+
+function renderList() {
+  const open = allRows.filter(r => r.status === 'offen').length;
+  const revenue = allRows.reduce((sum, r) => sum + (parseFloat(r.preis) || 0), 0);
+  document.getElementById('statOpen').textContent = open;
+  document.getElementById('statCount').textContent = allRows.length;
+  document.getElementById('statRevenue').textContent = revenue.toFixed(2).replace('.', ',') + ' €';
+
+  const rows = currentFilter === 'alle' ? allRows : allRows.filter(r => r.status === currentFilter);
+  const list = document.getElementById('list');
+
+  if (rows.length === 0) {
+    list.innerHTML = '<div class="empty">Keine Anfragen in dieser Ansicht.</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map(r => `
+    <div class="card">
+      <div class="card-top">
+        <div>
+          <h3>${esc(r.name)} — ${esc(r.modell)} (${esc(r.baujahr)})</h3>
+          <div class="muted">${fmtDate(r.eingang)} · Paket ${esc(r.paket)} · ${parseFloat(r.preis||0).toFixed(2).replace('.',',')} €</div>
+        </div>
+        <span class="status-pill ${statusClass(r.status)}">${esc(r.status || 'offen')}</span>
+      </div>
+
+      <div class="kv">
+        <div>E-Mail: <b>${esc(r.email)}</b></div>
+        <div>Telefon: <b>${esc(r.telefon) || '–'}</b></div>
+        <div>FIN: <b>${esc(r.fin)}</b></div>
+        <div>Motor: <b>${esc(r.motor) || '–'}</b></div>
+        <div>Frist: <b>${r.frist ? fmtDate(r.frist) : '–'}</b></div>
+        <div>PayPal-Order-ID: <b>${esc(r.orderId)}</b></div>
+      </div>
+
+      <div class="problem-box">${esc(r.problem)}</div>
+
+      <div class="photos">
+        ${(r.fotos || []).filter(Boolean).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">Foto ${i+1} ↗</a>`).join('')}
+      </div>
+
+      ${r.antwort ? `<div class="reply-existing">Letzte Antwort (${fmtDate(r.antwortDatum)}):<br>${esc(r.antwort)}</div>` : ''}
+
+      <div class="actions">
+        <button onclick="toggleReply(this)">✉️ Antworten</button>
+        ${r.status !== 'beantwortet' ? `<button onclick="quickStatus('${esc(r.orderId)}','beantwortet',this)">Als beantwortet markieren</button>` : ''}
+        ${r.status !== 'in Bearbeitung' && r.status !== 'beantwortet' ? `<button onclick="quickStatus('${esc(r.orderId)}','in Bearbeitung',this)">In Bearbeitung</button>` : ''}
+        ${r.status !== 'offen' ? `<button onclick="quickStatus('${esc(r.orderId)}','offen',this)">Wieder öffnen</button>` : ''}
+      </div>
+
+      <div class="reply-box">
+        <textarea placeholder="Antwort an ${esc(r.name)} (${esc(r.email)})…"></textarea>
+        <div class="actions">
+          <button class="send-btn" onclick="sendReply(this,'${esc(r.orderId)}','${esc(r.email)}','${esc(r.name)}')">Senden</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function toggleReply(btn) {
+  const box = btn.closest('.card').querySelector('.reply-box');
+  box.style.display = box.style.display === 'block' ? 'none' : 'block';
+}
+
+async function quickStatus(orderId, status, btn) {
+  btn.disabled = true;
+  try {
+    const res = await jsonp({ action: 'markStatus', orderId, status });
+    if (!res.ok) { alert('Fehler: ' + res.error); btn.disabled = false; return; }
+    await loadList();
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+async function sendReply(btn, orderId, email, name) {
+  const box = btn.closest('.reply-box');
+  const text = box.querySelector('textarea').value.trim();
+  if (!text) return;
+  btn.disabled = true; btn.textContent = 'Sende...';
+  try {
+    const res = await jsonp({ action: 'reply', orderId, email, name, text });
+    if (!res.ok) { alert('Fehler: ' + res.error); btn.disabled = false; btn.textContent = 'Senden'; return; }
+    await loadList();
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Senden';
+  }
+}
+
+// Auto-Login, falls Schlüssel schon gespeichert ist
+if (adminKey) {
+  jsonp({ action: 'list' }).then(res => {
+    if (res.ok) {
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      renderRows(res.rows);
+    } else {
+      localStorage.removeItem('tns_admin_key');
+      adminKey = '';
+    }
+  }).catch(() => {});
+}
+</script>
+</body>
+</html>
