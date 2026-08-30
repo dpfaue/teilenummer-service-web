@@ -64,6 +64,8 @@
   .reply-box{display:none;margin-top:14px;}
   .reply-box textarea{width:100%;min-height:100px;background:var(--bg-alt);border:1px solid var(--border);
     border-radius:8px;color:var(--text);padding:11px 13px;font-size:14px;font-family:inherit;}
+  .reply-box .pdf-input{margin-top:10px;font-size:13px;color:var(--text-dim);}
+  .reply-box .pdf-hint{margin-top:4px;}
   .reply-existing{margin-top:10px;font-size:13px;color:var(--text-dim);border-left:2px solid var(--ok);
     padding-left:10px;}
   .empty{color:var(--text-dim);text-align:center;padding:40px 0;}
@@ -230,7 +232,9 @@ function renderList() {
       </div>
 
       <div class="reply-box">
-        <textarea placeholder="Antwort an ${esc(r.name)} (${esc(r.email)})…">${r.antwort ? '' : esc(replyTemplate(r))}</textarea>
+        <textarea placeholder="Nur deine Antwort eintippen – Anrede, Fahrzeugbezug und Grußformel werden beim Senden automatisch ergänzt…"></textarea>
+        <input type="file" class="pdf-input" accept="application/pdf" multiple>
+        <div class="muted pdf-hint">Optional: PDF(s) anhängen (z.B. Explosionszeichnung, Teileliste)</div>
         <div class="actions">
           <button class="send-btn" onclick="sendReply(this,'${esc(r.orderId)}','${esc(r.email)}','${esc(r.name)}')">Senden</button>
         </div>
@@ -241,21 +245,6 @@ function renderList() {
 
 function gmailThreadUrl(threadId) {
   return 'https://mail.google.com/mail/u/0/#all/' + encodeURIComponent(threadId);
-}
-
-/** Vorausgefüllter Antworttext, damit nicht jedes Mal von Null angefangen werden muss. */
-function replyTemplate(r) {
-  const vorname = (r.name || '').trim().split(/\s+/)[0] || r.name || '';
-  return `Hallo ${vorname},
-
-danke für deine Anfrage bei Teilenummer.Service! Hier meine Einschätzung zu deinem ${r.modell || 'Fahrzeug'} (${r.baujahr || ''}):
-
-[HIER TEILENUMMER / SUCHBEGRIFFE / HINWEISE EINFÜGEN]
-
-Falls noch etwas unklar ist, antworte einfach auf diese E-Mail oder melde dich per WhatsApp.
-
-Viele Grüße
-Dominic – Teilenummer.Service`;
 }
 
 function esc(s) {
@@ -279,12 +268,41 @@ async function quickStatus(orderId, status, btn) {
   }
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadAttachment(orderId, file) {
+  const dataUrl = await fileToDataUrl(file);
+  await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    body: JSON.stringify({
+      kind: 'admin_attachment',
+      adminKey,
+      orderId,
+      filename: file.name,
+      mimeType: file.type || 'application/pdf',
+      dataUrl
+    })
+  });
+}
+
 async function sendReply(btn, orderId, email, name) {
   const box = btn.closest('.reply-box');
   const text = box.querySelector('textarea').value.trim();
+  const files = Array.from(box.querySelector('.pdf-input').files || []);
   if (!text) return;
   btn.disabled = true; btn.textContent = 'Sende...';
   try {
+    for (const file of files) {
+      await uploadAttachment(orderId, file);
+    }
     const res = await jsonp({ action: 'reply', orderId, email, name, text });
     if (!res.ok) { alert('Fehler: ' + res.error); btn.disabled = false; btn.textContent = 'Senden'; return; }
     await loadList();
