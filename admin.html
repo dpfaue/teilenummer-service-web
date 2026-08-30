@@ -67,6 +67,9 @@
   .reply-existing{margin-top:10px;font-size:13px;color:var(--text-dim);border-left:2px solid var(--ok);
     padding-left:10px;}
   .empty{color:var(--text-dim);text-align:center;padding:40px 0;}
+  .mail-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;text-decoration:none;
+    background:var(--bg-alt);padding:5px 10px;border-radius:6px;margin-top:8px;}
+  .mail-link.unread{background:rgba(245,196,81,.18);color:var(--warn);font-weight:700;}
 </style>
 </head>
 <body>
@@ -215,6 +218,10 @@ function renderList() {
 
       ${r.antwort ? `<div class="reply-existing">Letzte Antwort (${fmtDate(r.antwortDatum)}):<br>${esc(r.antwort)}</div>` : ''}
 
+      ${r.threadId ? `<a class="mail-link${r.kundenAntwortUngelesen ? ' unread' : ''}" href="${gmailThreadUrl(r.threadId)}" target="_blank" rel="noopener">
+        ${r.kundenAntwortUngelesen ? '🔵 Neue Antwort vom Kunden – Verlauf in Gmail öffnen ↗' : '📧 Mail-Verlauf in Gmail öffnen ↗'}
+      </a>` : ''}
+
       <div class="actions">
         <button onclick="toggleReply(this)">✉️ Antworten</button>
         ${r.status !== 'beantwortet' ? `<button onclick="quickStatus('${esc(r.orderId)}','beantwortet',this)">Als beantwortet markieren</button>` : ''}
@@ -223,13 +230,32 @@ function renderList() {
       </div>
 
       <div class="reply-box">
-        <textarea placeholder="Antwort an ${esc(r.name)} (${esc(r.email)})…"></textarea>
+        <textarea placeholder="Antwort an ${esc(r.name)} (${esc(r.email)})…">${r.antwort ? '' : esc(replyTemplate(r))}</textarea>
         <div class="actions">
           <button class="send-btn" onclick="sendReply(this,'${esc(r.orderId)}','${esc(r.email)}','${esc(r.name)}')">Senden</button>
         </div>
       </div>
     </div>
   `).join('');
+}
+
+function gmailThreadUrl(threadId) {
+  return 'https://mail.google.com/mail/u/0/#all/' + encodeURIComponent(threadId);
+}
+
+/** Vorausgefüllter Antworttext, damit nicht jedes Mal von Null angefangen werden muss. */
+function replyTemplate(r) {
+  const vorname = (r.name || '').trim().split(/\s+/)[0] || r.name || '';
+  return `Hallo ${vorname},
+
+danke für deine Anfrage bei Teilenummer.Service! Hier meine Einschätzung zu deinem ${r.modell || 'Fahrzeug'} (${r.baujahr || ''}):
+
+[HIER TEILENUMMER / SUCHBEGRIFFE / HINWEISE EINFÜGEN]
+
+Falls noch etwas unklar ist, antworte einfach auf diese E-Mail oder melde dich per WhatsApp.
+
+Viele Grüße
+Dominic – Teilenummer.Service`;
 }
 
 function esc(s) {
