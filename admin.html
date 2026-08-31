@@ -72,6 +72,10 @@
   .mail-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;text-decoration:none;
     background:var(--bg-alt);padding:5px 10px;border-radius:6px;margin-top:8px;}
   .mail-link.unread{background:rgba(245,196,81,.18);color:var(--warn);font-weight:700;}
+  #unreadBanner{display:none;align-items:center;gap:10px;background:rgba(245,196,81,.15);
+    border:1px solid var(--warn);color:var(--warn);font-weight:700;font-size:14px;
+    border-radius:var(--radius);padding:12px 16px;margin:18px 0 0;}
+  #reload.just-reloaded{color:var(--ok);border-color:var(--ok);}
 </style>
 </head>
 <body>
@@ -87,6 +91,8 @@
 <div class="wrap" id="app">
   <h1>Teilenummer.Service — Anfragen</h1>
   <p class="muted">Nicht öffentlich verlinkt. Diese Seite bitte nicht teilen.</p>
+
+  <div id="unreadBanner">🔵 <span id="unreadText"></span></div>
 
   <div class="stats">
     <div class="stat"><div class="val" id="statOpen">–</div><div class="lbl">offene Anfragen</div></div>
@@ -148,12 +154,23 @@ async function login() {
 }
 
 async function loadList() {
+  const btn = document.getElementById('reload');
+  const originalLabel = '↻ Aktualisieren';
+  if (btn) { btn.disabled = true; btn.textContent = 'Lädt…'; }
   try {
     const res = await jsonp({ action: 'list' });
     if (!res.ok) { alert('Fehler: ' + res.error); return; }
     renderRows(res.rows);
+    if (btn) {
+      btn.textContent = '✓ Aktualisiert';
+      btn.classList.add('just-reloaded');
+      setTimeout(() => { btn.textContent = originalLabel; btn.classList.remove('just-reloaded'); }, 1500);
+    }
   } catch (e) {
     alert('Netzwerkfehler beim Laden: ' + e.message);
+    if (btn) btn.textContent = originalLabel;
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -184,6 +201,19 @@ function renderList() {
   document.getElementById('statOpen').textContent = open;
   document.getElementById('statCount').textContent = allRows.length;
   document.getElementById('statRevenue').textContent = revenue.toFixed(2).replace('.', ',') + ' €';
+
+  const unread = allRows.filter(r => r.kundenAntwortUngelesen).length;
+  const banner = document.getElementById('unreadBanner');
+  if (unread > 0) {
+    document.getElementById('unreadText').textContent = unread === 1
+      ? 'Neue Antwort von einem Kunden – siehe markierte Karte unten.'
+      : unread + ' neue Kundenantworten – siehe markierte Karten unten.';
+    banner.style.display = 'flex';
+    document.title = '(' + unread + ') Teilenummer.Service — Anfragen';
+  } else {
+    banner.style.display = 'none';
+    document.title = 'Teilenummer.Service — Anfragen';
+  }
 
   const rows = currentFilter === 'alle' ? allRows : allRows.filter(r => r.status === currentFilter);
   const list = document.getElementById('list');
