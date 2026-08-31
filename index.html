@@ -75,7 +75,9 @@
   .file-drop.has-files{border-color:var(--ok);color:var(--ok);}
   #photoInput{display:none;}
   .disclaimer{font-size:12.5px;color:var(--text-dim);background:var(--bg-alt);border-radius:8px;
-    padding:12px 14px;margin:20px 0;} .ack-check{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text-dim);margin:-6px 0 20px;cursor:pointer;} .ack-check input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
+    padding:12px 14px;margin:20px 0;}
+  .ack-check{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text-dim);margin:-6px 0 20px;cursor:pointer;}
+  .ack-check input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
   .selected-plan-bar{display:flex;justify-content:space-between;align-items:center;
     background:var(--bg-alt);border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:14.5px;}
   .selected-plan-bar strong{font-size:17px;}
@@ -104,7 +106,8 @@
     <div id="statusBadge" class="status-badge"><span class="dot"></span><span id="statusText">Status wird geprüft…</span></div>
     <h1>Falsches Teil bestellt kostet Zeit &amp; Geld.<br>Wir sagen dir vorher, welches richtig ist.</h1>
     <p class="sub">FIN, Foto und kurze Problembeschreibung schicken – du bekommst die passende OEM-Teilenummer, Suchbegriffe und Bezugsquellen. Von jemandem, der täglich mit Kfz-Ersatzteilen arbeitet.</p>
-    <p style="color:var(--ok);font-weight:600;font-size:14px;margin:0 0 18px;">✅ Geld-zurück-Garantie – finden wir keine passende Teilenummer, bekommst du dein Geld zurück.</p> <a href="#anfrage" class="cta-btn">Jetzt Teilenummer anfragen</a>
+    <p style="color:var(--ok);font-weight:600;font-size:14px;margin:0 0 18px;">✅ Geld-zurück-Garantie – finden wir keine passende Teilenummer, bekommst du dein Geld zurück.</p>
+    <a href="#anfrage" class="cta-btn">Jetzt Teilenummer anfragen</a>
   </div>
 </header>
 
@@ -147,7 +150,7 @@
         <input type="radio" name="planRadio" value="express">
         <span class="badge">Express</span>
         <h3>Express</h3>
-        <div class="price">10,99&nbsp;€ <small>Antwort in 1–2h</small></div>
+        <div class="price">10,99&nbsp;€ <small>Antwort in 12h</small></div>
         <ul>
           <li>Alles aus Basis</li>
           <li>Alternativ-/Zubehörteile</li>
@@ -159,12 +162,10 @@
         <input type="radio" name="planRadio" value="premium">
         <span class="badge">Premium</span>
         <h3>Premium</h3>
-        <div class="price">19,99&nbsp;€ <small>ausführlichste Antwort</small></div>
+        <div class="price">19,99&nbsp;€ <small>Antwort in 1–2h</small></div>
         <ul>
           <li>Alles aus Express</li>
-          <li>Einordnung des Fehlerbilds</li>
-          <li>Reparaturhinweise</li>
-          <li>„Was zuerst prüfen“-Reihenfolge</li>
+          <li>Schnellste Bearbeitung (1–2h)</li>
         </ul>
       </label>
     </div>
@@ -238,10 +239,16 @@
         </div>
 
         <div class="disclaimer">
-          Die Auskunft erfolgt nach bestem Wissen anhand deiner Angaben, ohne Gewähr. Sie ersetzt keine Prüfung durch eine Fachwerkstatt und ist keine Einbau-/Reparaturanleitung.<br><br> <strong>Geld-zurück-Garantie:</strong> Lässt sich anhand deiner Angaben keine verwertbare Auskunft geben (z.&nbsp;B. weil der Fall zu speziell ist oder wir nichts Passendes finden), bekommst du den vollen Betrag zurück – melde dich dazu einfach mit deiner Transaktions-ID bei uns.
+          Die Auskunft erfolgt nach bestem Wissen anhand deiner Angaben, ohne Gewähr. Sie ersetzt keine Prüfung durch eine Fachwerkstatt und ist keine Einbau-/Reparaturanleitung.<br><br>
+          <strong>Geld-zurück-Garantie:</strong> Lässt sich anhand deiner Angaben keine verwertbare Auskunft geben (z.&nbsp;B. weil der Fall zu speziell ist oder wir nichts Passendes finden), bekommst du den vollen Betrag zurück – melde dich dazu einfach mit deiner Transaktions-ID bei uns.
         </div>
 
-        <label class="ack-check"><input type="checkbox" id="f_ack" required><span>Hinweis oben gelesen und zur Kenntnis genommen. *</span></label> <button type="button" id="toStage2" class="cta-btn" style="width:100%">Weiter zur Zahlung</button>
+        <label class="ack-check">
+          <input type="checkbox" id="f_ack" required>
+          <span>Hinweis oben gelesen und zur Kenntnis genommen. *</span>
+        </label>
+
+        <button type="button" id="toStage2" class="cta-btn" style="width:100%">Weiter zur Zahlung</button>
       </div>
 
       <div id="stage2">
@@ -275,7 +282,7 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec";
 /* =========================================================== */
 
-const PLAN_LABELS = { basis: "Basis (24h)", express: "Express (1–2h)", premium: "Premium" };
+const PLAN_LABELS = { basis: "Basis (24h)", express: "Express (12h)", premium: "Premium (1–2h)" };
 let selectedPlan = null;
 let photoDataUrls = [];
 
