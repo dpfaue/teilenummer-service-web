@@ -66,6 +66,14 @@
     border-radius:8px;color:var(--text);padding:11px 13px;font-size:14px;font-family:inherit;}
   .reply-box .pdf-input{margin-top:10px;font-size:13px;color:var(--text-dim);}
   .reply-box .pdf-hint{margin-top:4px;}
+  .invoice-box{display:none;margin-top:14px;}
+  .invoice-box textarea{width:100%;min-height:80px;background:var(--bg-alt);border:1px solid var(--border);
+    border-radius:8px;color:var(--text);padding:11px 13px;font-size:13.5px;font-family:inherit;}
+  .invoice-box .hint{margin-bottom:6px;}
+  .invoice-box .hint code{background:var(--bg-alt);padding:1px 5px;border-radius:4px;}
+  .invoice-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;text-decoration:none;
+    background:rgba(62,207,142,.15);color:var(--ok);padding:8px 14px;border-radius:8px;font-weight:700;}
+  .invoice-meta{margin-top:8px;}
   .reply-existing{margin-top:10px;font-size:13px;color:var(--text-dim);border-left:2px solid var(--ok);
     padding-left:10px;}
   .empty{color:var(--text-dim);text-align:center;padding:40px 0;}
@@ -256,6 +264,7 @@ function renderList() {
 
       <div class="actions">
         <button onclick="toggleReply(this)">✉️ Antworten</button>
+        <button onclick="toggleInvoice(this)">🧾 Rechnung/PDF${r.rechnungsnummer ? ' (' + esc(r.rechnungsnummer) + ')' : ''}</button>
         ${r.status !== 'beantwortet' ? `<button onclick="quickStatus('${esc(r.orderId)}','beantwortet',this)">Als beantwortet markieren</button>` : ''}
         ${r.status !== 'in Bearbeitung' && r.status !== 'beantwortet' ? `<button onclick="quickStatus('${esc(r.orderId)}','in Bearbeitung',this)">In Bearbeitung</button>` : ''}
         ${r.status !== 'offen' ? `<button onclick="quickStatus('${esc(r.orderId)}','offen',this)">Wieder öffnen</button>` : ''}
@@ -268,6 +277,16 @@ function renderList() {
         <div class="actions">
           <button class="send-btn" onclick="sendReply(this,'${esc(r.orderId)}','${esc(r.email)}','${esc(r.name)}')">Senden</button>
         </div>
+      </div>
+
+      <div class="invoice-box">
+        <div class="muted hint">Gefundene Ersatzteile, eine Zeile pro Teil: <code>Bezeichnung | Teilenummer | Hinweis</code> (Hinweis optional, z.B. „links“/„rechts“)</div>
+        <textarea class="teile-input" placeholder="Abdeckblech-Bremsscheibe rechts | 13219214&#10;Abdeckblech-Bremsscheibe links | 13219213">${esc(r.ersatzteile)}</textarea>
+        <div class="actions">
+          <button class="pdf-gen-btn" onclick="generatePdf(this,'${esc(r.orderId)}')">📄 PDF erstellen/aktualisieren</button>
+          ${r.pdfLink ? `<a class="invoice-link" href="${esc(r.pdfLink)}" target="_blank" rel="noopener">📄 PDF ansehen ↗</a>` : ''}
+        </div>
+        ${r.rechnungsnummer ? `<div class="muted invoice-meta">Rechnungsnummer <b>${esc(r.rechnungsnummer)}</b> – wird automatisch an die nächste Antwort-Mail angehängt.</div>` : ''}
       </div>
     </div>
   `).join('');
@@ -284,6 +303,30 @@ function esc(s) {
 function toggleReply(btn) {
   const box = btn.closest('.card').querySelector('.reply-box');
   box.style.display = box.style.display === 'block' ? 'none' : 'block';
+}
+
+function toggleInvoice(btn) {
+  const box = btn.closest('.card').querySelector('.invoice-box');
+  box.style.display = box.style.display === 'block' ? 'none' : 'block';
+}
+
+async function generatePdf(btn, orderId) {
+  const box = btn.closest('.invoice-box');
+  const ersatzteile = box.querySelector('.teile-input').value;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Erstelle...';
+  try {
+    const res = await jsonp({ action: 'generatePdf', orderId, ersatzteile });
+    if (!res.ok) { alert('Fehler: ' + res.error); return; }
+    alert('✅ PDF erstellt (Rechnungsnummer ' + res.invoiceNumber + ').\nWird automatisch an die nächste Antwort-Mail angehängt.\n\n' + res.url);
+    await loadList();
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 async function quickStatus(orderId, status, btn) {
