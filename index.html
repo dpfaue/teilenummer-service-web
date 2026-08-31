@@ -170,7 +170,7 @@
       <div class="step"><div class="num">2</div><h3>Paket wählen &amp; zahlen</h3>
         <p>Sicher per PayPal direkt auf dieser Seite. Kein Vorkasse-Risiko für dich, sofortige Bearbeitung für uns.</p></div>
       <div class="step"><div class="num">3</div><h3>Antwort erhalten</h3>
-        <p>Teilenummer-Einschätzung, Suchbegriffe und Hinweise per E-Mail bzw. WhatsApp – je nach gewähltem Paket.</p></div>
+        <p>Teilenummer-Einschätzung, Suchbegriffe und Hinweise per E-Mail – je nach gewähltem Paket.</p></div>
     </div>
     <p class="lead" style="margin-top:20px;font-size:13.5px;">
       ⏱ Servicezeiten: <strong style="color:var(--text)">8:00–20:00 Uhr</strong>. Alle Antwortfristen gelten innerhalb dieses Fensters – Anfragen außerhalb (nachts) zählen erst ab 8:00 Uhr am nächsten Tag.
@@ -250,7 +250,7 @@
         </div>
 
         <div class="field">
-          <label>WhatsApp / Telefon <span class="hint">(optional, für schnellere Rückfragen)</span></label>
+          <label>Telefon <span class="hint">(optional, falls wir dich bei Rückfragen anrufen müssen)</span></label>
           <input type="tel" id="f_phone">
         </div>
 
@@ -312,7 +312,7 @@
       <p id="confirmText"></p>
       <p style="color:var(--text-dim);font-size:13px">
         Bitte diese Seite als Beleg speichern (Screenshot). Falls du innerhalb der Frist nichts hörst,
-        melde dich mit deiner Transaktions-ID per E-Mail oder WhatsApp bei uns.
+        melde dich mit deiner Transaktions-ID per E-Mail bei uns.
       </p>
     </div>
   </div>
@@ -494,7 +494,7 @@ async function submitRequest(order) {
   document.getElementById('confirmation').style.display = 'block';
   document.getElementById('confirmText').innerHTML =
     `Paket <strong>${PLAN_LABELS[selectedPlan.key]}</strong> · Transaktions-ID: <strong>${order.id}</strong><br>` +
-    `Antwort geht an ${payload.email}${payload.phone ? ' bzw. per WhatsApp an ' + payload.phone : ''}.`;
+    `Antwort geht an ${payload.email}.`;
   document.getElementById('confirmation').scrollIntoView({ behavior: 'smooth' });
 }
 </script>
