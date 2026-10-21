@@ -255,6 +255,8 @@ function renderList() {
         <div>Motor: <b>${esc(r.motor) || '–'}</b></div>
         <div>Frist: <b>${r.frist ? fmtDate(r.frist) : '–'}</b></div>
         <div>PayPal-Order-ID: <b>${esc(r.orderId)}</b></div>
+        <div>Quelle: <b>${esc(r.quelle) || '–'}</b></div>
+        <div>Zahlung: <b${String(r.zahlungCheck || '').indexOf('ABWEICHUNG') === 0 ? ' style="color:#ff8a8a"' : ''}>${esc(r.zahlungCheck) || '–'}</b></div>
       </div>
 
       <div class="problem-box">${esc(r.problem)}</div>
