@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Teilenummer – Verwaltung</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Teilenummer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+<!-- Anmeldung -->
+<section id="gate" class="gate" hidden>
+  <img src="icons/icon-192.png" alt="" class="gate-logo">
+  <h1>Teilenummer<span>.Service</span></h1>
+  <p class="dim">Verwaltung – bitte mit deinem Admin-Schlüssel anmelden. Der Schlüssel bleibt nur auf diesem Gerät gespeichert.</p>
+  <form id="gateForm">
+    <input type="password" id="keyInput" placeholder="Admin-Schlüssel" autocomplete="current-password" required>
+    <button type="submit" class="btn">Anmelden</button>
+  </form>
+  <div id="gateError" class="err"></div>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><img src="icons/favicon-64.png" alt=""><span>Teilenummer<b>.Service</b></span></div>
+    <div class="top-right">
+      <span id="syncInfo" class="dim small"></span>
+      <button id="refreshBtn" class="icon-btn" title="Aktualisieren" aria-label="Aktualisieren">↻</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="anfragen" class="active"><span class="ti">📋</span><span>Anfragen</span><em id="badgeOpen" hidden></em></button>
+    <button data-view="postfach"><span class="ti">✉️</span><span>Postfach</span><em id="badgeMail" hidden></em></button>
+    <button data-view="umsatz"><span class="ti">📈</span><span>Umsatz</span></button>
+    <button data-view="mehr"><span class="ti">⚙️</span><span>Mehr</span></button>
+  </nav>
+
+  <main id="main">
+    <!-- Anfragen -->
+    <section class="view" id="view-anfragen">
+      <div id="replyBanner" class="banner" hidden></div>
+      <div class="chips" id="statusChips"></div>
+      <input type="search" id="search" class="search" placeholder="Suchen: Name, FIN, Modell, E-Mail …">
+      <div id="list"></div>
+    </section>
+
+    <!-- Detail -->
+    <section class="view" id="view-detail" hidden>
+      <button class="back" id="backBtn">← Zurück</button>
+      <div id="detail"></div>
+    </section>
+
+    <!-- Postfach -->
+    <section class="view" id="view-postfach" hidden>
+      <div class="view-head"><h2>Postfach</h2><a class="small" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com#inbox">In Gmail öffnen ↗</a></div>
+      <p class="dim small">Posteingang von teilenummer.service@gmail.com (letzte 25 Unterhaltungen).</p>
+      <div id="inbox"><div class="empty">Wird geladen …</div></div>
+    </section>
+
+    <!-- Umsatz -->
+    <section class="view" id="view-umsatz" hidden>
+      <h2>Umsatz</h2>
+      <div id="revenue"></div>
+    </section>
+
+    <!-- Mehr -->
+    <section class="view" id="view-mehr" hidden>
+      <h2>Einstellungen</h2>
+      <div class="card">
+        <h3>Push-Benachrichtigungen</h3>
+        <p class="dim small" id="pushInfo">Kommt im nächsten Schritt: Benachrichtigung bei neuer Anfrage, Zahlung und neuer E-Mail.</p>
+        <button class="btn" id="pushBtn" disabled>Benachrichtigungen aktivieren</button>
+      </div>
+      <div class="card">
+        <h3>App installieren</h3>
+        <p class="dim small"><b>iPhone/iPad:</b> in Safari öffnen → Teilen-Symbol → „Zum Home-Bildschirm“.<br>
+        <b>Mac:</b> in Safari „Ablage → Zum Dock hinzufügen“ bzw. in Chrome das Installieren-Symbol in der Adresszeile.<br>
+        <b>Android/Windows:</b> Chrome-Menü → „App installieren“.</p>
+        <button class="btn ghost" id="installBtn" hidden>Jetzt installieren</button>
+      </div>
+      <div class="card">
+        <h3>Links</h3>
+        <p class="small"><a href="https://teilenummer-service.de/" target="_blank" rel="noopener">Website ↗</a> ·
+        <a href="https://www.paypal.com/activities" target="_blank" rel="noopener">PayPal-Aktivitäten ↗</a> ·
+        <a href="https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com" target="_blank" rel="noopener">Gmail ↗</a></p>
+      </div>
+      <div class="card">
+        <h3>Abmelden</h3>
+        <p class="dim small">Entfernt den gespeicherten Schlüssel von diesem Gerät.</p>
+        <button class="btn danger" id="logoutBtn">Abmelden</button>
+      </div>
+      <p class="dim small center">Version <span id="appVersion"></span></p>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script src="app.js?v=1"></script>
+</body>
+</html>
