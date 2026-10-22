@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /admin.html
+Disallow: /app/
 
 Sitemap: https://teilenummer-service.de/sitemap.xml
