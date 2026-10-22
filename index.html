@@ -351,7 +351,7 @@
   <div class="wrap">
     <div>Teilenummer.Service — Dominic Pfaue</div>
     <div style="margin-bottom:6px;"><a href="ratgeber-falsches-teil-bestellt.html">Falsches Teil bestellt?</a> · <a href="ratgeber-teilenummer-per-fin-finden.html">Teilenummer per FIN finden</a></div>
-    <div><a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · <a href="widerruf.html">Widerrufsbelehrung</a> · <a href="mailto:kontakt@teilenummer-service.de">kontakt@teilenummer-service.de</a></div>
+    <div><a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · <a href="widerruf.html">Widerrufsbelehrung</a> · <a href="#" data-consent-settings>Cookie-Einstellungen</a> · <a href="mailto:kontakt@teilenummer-service.de">kontakt@teilenummer-service.de</a></div>
   </div>
 </footer>
 
@@ -611,10 +611,12 @@ async function submitPaid(order) {
   t.append('Paket ', Object.assign(document.createElement('strong'), { textContent: PLANS[selectedPlan.key].label }),
     ' · Transaktions-ID: ', Object.assign(document.createElement('strong'), { textContent: order.id }),
     document.createElement('br'), 'Antwort geht an ' + payload.email + '.');
+  try { if (window.tnsConversion) window.tnsConversion(selectedPlan.price, order.id); } catch (e) {}
   if (!sent) t.append(document.createElement('br'), 'Hinweis: Die Übertragung war gestört. Bitte schick uns kurz deine Transaktions-ID per E-Mail, damit nichts verloren geht.');
   document.getElementById('confirmation').scrollIntoView({ behavior: 'smooth' });
 }
 </script>
+<script src="consent.js?v=1"></script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "d872927817e94946a4bc0a62241a03fe"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
