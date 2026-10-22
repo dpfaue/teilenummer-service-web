@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/favicon-64.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -49,6 +49,7 @@
   <main id="main">
     <!-- Anfragen -->
     <section class="view" id="view-anfragen">
+      <div id="summary" class="summary"></div>
       <div id="replyBanner" class="banner" hidden></div>
       <div class="chips" id="statusChips"></div>
       <input type="search" id="search" class="search" placeholder="Suchen: Name, FIN, Modell, E-Mail …">
@@ -79,8 +80,19 @@
       <h2>Einstellungen</h2>
       <div class="card">
         <h3>Push-Benachrichtigungen</h3>
-        <p class="dim small" id="pushInfo">Kommt im nächsten Schritt: Benachrichtigung bei neuer Anfrage, Zahlung und neuer E-Mail.</p>
-        <button class="btn" id="pushBtn" disabled>Benachrichtigungen aktivieren</button>
+        <p class="dim small">Meldung aufs Gerät bei neuer bezahlter Anfrage, neuer E-Mail bzw. Kundenantwort und 60 Minuten vor Ablauf einer Frist.</p>
+        <p class="small" id="pushInfo"></p>
+        <div class="actions">
+          <button class="btn small" id="pushBtn">🔔 Auf diesem Gerät aktivieren</button>
+          <button class="btn ghost small" id="pushTestBtn" hidden>Test senden</button>
+          <button class="btn ghost small" id="pushOffBtn" hidden>Deaktivieren</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Textbausteine</h3>
+        <p class="dim small">Erscheinen beim Antworten als Knöpfe. Platzhalter: {vorname}, {modell}, {baujahr}, {fin}, {motor}. Anrede und Grußformel ergänzt das System bei der ersten Antwort automatisch.</p>
+        <div id="tplList"></div>
+        <div class="actions"><button class="btn ghost small" id="tplAdd">+ Neuer Baustein</button><button class="btn ghost small" id="tplReset">Standard wiederherstellen</button></div>
       </div>
       <div class="card">
         <h3>App installieren</h3>
@@ -106,6 +118,6 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

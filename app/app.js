@@ -1,11 +1,19 @@
 /* Teilenummer.Service – Verwaltungs-App (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.0.0 (22.10.2026)';
+const APP_VERSION = '1.1.0 (22.10.2026)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
+const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
+const DEFAULT_TPL = [
+  { t: 'Teilenummer gefunden', x: 'Das passende Teil für deine FIN {fin}:\n\nBezeichnung: \nTeilenummer: \nHinweis: \n\nMit dieser Nummer findest du das Teil bei jedem Teilehändler oder online. Achte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
+  { t: 'Mehrere Varianten', x: 'Für deinen {modell} gibt es je nach Ausstattung mehrere Varianten:\n\n1) \n2) \n\nWelche bei dir verbaut ist, erkennst du am einfachsten an: ' },
+  { t: 'Rückfrage', x: 'Damit ich das Teil eindeutig bestimmen kann, brauche ich noch eine Info von dir:\n\n\nAntworte einfach auf diese E-Mail, dann melde ich mich schnellstmöglich mit dem Ergebnis.' },
+  { t: 'PDF im Anhang', x: 'Alle Teile mit Teilenummern findest du übersichtlich im angehängten PDF. Das PDF ist gleichzeitig deine Rechnung.' },
+  { t: 'Nicht ermittelbar', x: 'Leider konnte ich das gesuchte Teil für deinen {modell} nicht eindeutig ermitteln. Grund: \n\nDeshalb erstatte ich dir den vollen Betrag über PayPal – das Geld ist in den nächsten Tagen wieder auf deinem Konto.' }
+];
 
 const $ = s => document.querySelector(s);
 const store = {
@@ -21,6 +29,7 @@ let filter = store.get('tns_filter', 'offen');
 let currentView = 'anfragen';
 let detailId = null;
 let lastSync = 0;
+let tpls = store.get('tns_tpl', null) || DEFAULT_TPL.map(x => ({ ...x }));
 
 /* ---------- Hilfen ---------- */
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -128,6 +137,7 @@ function go(view) {
   document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
   if (view === 'postfach') { renderInbox(); loadInbox(); }
   if (view === 'umsatz') renderRevenue();
+  if (view === 'mehr') { pushState(); renderTplEditor(); }
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => { if (b.dataset.view === 'anfragen') detailId = null; go(b.dataset.view); render(); }));
@@ -135,12 +145,41 @@ $('#refreshBtn').addEventListener('click', () => refresh(false));
 $('#backBtn').addEventListener('click', () => { detailId = null; go('anfragen'); render(); });
 $('#search').addEventListener('input', renderList);
 
+/* Detail nicht neu zeichnen, solange dort getippt wird oder Dateien ausgewählt sind (Entwürfe werden ohnehin gespeichert). */
 function detailBusy() {
-  const t = $('#replyText'), p = $('#parts');
-  const a = document.activeElement;
-  return !!((t && t.value.trim()) || (a && (a === t || a === p)) || (p && p.dataset.dirty));
+  const a = document.activeElement, f = $('#replyFiles'), box = $('#detail');
+  return !!((a && box && box.contains(a) && /^(TEXTAREA|INPUT)$/.test(a.tagName)) || (f && f.files && f.files.length));
 }
-function render() { updateBadges(); renderChips(); renderList(); if (detailId && !detailBusy()) renderDetail(); if (currentView === 'umsatz') renderRevenue(); }
+function render() { updateBadges(); renderSummary(); renderChips(); renderList(); if (detailId && !detailBusy()) renderDetail(); if (currentView === 'umsatz') renderRevenue(); }
+
+/* Übersicht oben: offene Anfragen, nächste Frist, Umsatz heute/Monat */
+function renderSummary() {
+  const open = rows.filter(r => r.status === 'offen' || r.status === 'in Bearbeitung');
+  const next = open.filter(r => r.frist).sort((a, b) => new Date(a.frist) - new Date(b.frist))[0];
+  const d = next ? dueInfo(next) : null;
+  const paid = rows.filter(r => r.status !== 'erstattet');
+  const now = new Date(), sum = a => a.reduce((s, r) => s + (parseFloat(r.preis) || 0), 0);
+  const today = paid.filter(r => new Date(r.eingang).toDateString() === now.toDateString());
+  const month = paid.filter(r => { const x = new Date(r.eingang); return x.getMonth() === now.getMonth() && x.getFullYear() === now.getFullYear(); });
+  $('#summary').innerHTML = `
+    <div class="s ${open.length ? 'warn' : 'ok'}"><b>${open.length}</b><span>offen</span></div>
+    <div class="s ${d ? (d.cls === 'late' ? 'bad' : d.cls === 'soon' ? 'warn' : 'ok') : ''}"><b>${d ? esc(d.txt.replace('Frist in ', '').replace('überfällig seit ', '')) : '–'}</b><span>${d && d.cls === 'late' ? 'Frist überschritten' : 'nächste Frist'}</span></div>
+    <div class="s"><b>${euro(sum(today))}</b><span>heute (${today.length})</span></div>
+    <div class="s"><b>${euro(sum(month))}</b><span>dieser Monat (${month.length})</span></div>`;
+}
+
+/* Entwürfe je Anfrage (wie in der ELUH-App: nichts geht verloren, wenn die App zugeht) */
+function getDraft(id) { return store.get('tns_draft_' + id, {}); }
+function setDraft(id, patch) {
+  const d = Object.assign(getDraft(id), patch);
+  Object.keys(d).forEach(k => { if (d[k] === undefined || d[k] === '') delete d[k]; });
+  Object.keys(d).length ? store.set('tns_draft_' + id, d) : store.del('tns_draft_' + id);
+}
+function fillTpl(text, r) {
+  const vorname = String(r.name || '').trim().split(/\s+/)[0] || '';
+  return text.replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
+    .replace(/\{fin\}/g, r.fin || '').replace(/\{motor\}/g, r.motor || '');
+}
 
 function updateBadges() {
   const open = rows.filter(r => r.status === 'offen').length;
@@ -194,16 +233,23 @@ function renderDetail() {
     <div class="d-head"><div><h2>${esc(r.name || '–')}</h2><div class="dim">${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}</div></div>
       <span class="pill ${stClass(r.status)}">${esc(r.status || 'offen')}</span></div>
     ${d ? `<div class="due ${d.cls}" style="margin-top:8px">⏱ ${esc(d.txt)} (bis ${esc(fmt(r.frist))})</div>` : ''}
+    ${(r.status || 'offen') === 'offen' ? `<div class="actions"><button class="btn small" data-st="in Bearbeitung">▶ Übernehmen (in Bearbeitung)</button></div>` : ''}
+    <div class="tools">
+      ${r.fin ? `<button data-pl="${esc(r.fin)}">🔎 Partslink24 (FIN wird kopiert)</button>` : ''}
+      ${r.fin ? `<a href="https://www.vindecoderz.com/EN/check-lookup/${encodeURIComponent(r.fin)}" target="_blank" rel="noopener">🧾 FIN entschlüsseln</a>` : ''}
+      <a href="https://www.google.com/search?q=${encodeURIComponent([r.modell, r.baujahr, r.motor, String(r.problem || '').slice(0, 80)].filter(Boolean).join(' '))}" target="_blank" rel="noopener">🌐 Google-Suche</a>
+      ${r.telefon ? `<a href="tel:${esc(r.telefon)}">📞 Anrufen</a>` : ''}
+    </div>
     <div class="kv">
       <div>Paket<b>${esc(PAKETE[r.paket] || r.paket || '–')} · ${euro(r.preis)}</b></div>
       <div>Eingang<b>${esc(fmt(r.eingang))}</b></div>
-      <div>E-Mail<b><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></b></div>
+      <div class="wide">E-Mail<b><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></b></div>
       <div>Telefon<b>${r.telefon ? `<a href="tel:${esc(r.telefon)}">${esc(r.telefon)}</a>` : '–'}</b></div>
-      <div>FIN<b>${esc(r.fin || '–')}${r.fin ? `<button class="copy" data-copy="${esc(r.fin)}">kopieren</button>` : ''}</b></div>
+      <div class="wide">FIN<b>${esc(r.fin || '–')}${r.fin ? `<button class="copy" data-copy="${esc(r.fin)}">kopieren</button>` : ''}</b></div>
       <div>Motor<b>${esc(r.motor || '–')}</b></div>
       <div>Quelle<b>${esc(r.quelle || '–')}</b></div>
-      <div>Zahlung<b style="${String(r.zahlungCheck || '').startsWith('ABWEICHUNG') ? 'color:var(--bad)' : ''}">${esc(r.zahlungCheck || '–')}</b></div>
-      <div>PayPal-Order-ID<b>${esc(r.orderId || '–')}</b></div>
+      <div class="wide">Zahlung<b style="${String(r.zahlungCheck || '').startsWith('ABWEICHUNG') ? 'color:var(--bad)' : ''}">${esc(r.zahlungCheck || '–')}</b></div>
+      <div class="wide">PayPal-Order-ID<b>${esc(r.orderId || '–')}</b></div>
       ${r.rechnungsnummer ? `<div>Rechnungsnummer<b>${esc(r.rechnungsnummer)}</b></div>` : ''}
     </div>
     <div class="section-title">Problem / gesuchtes Teil</div>
@@ -215,7 +261,9 @@ function renderDetail() {
 
     <div class="section-title">Antworten</div>
     <div class="card">
-      <textarea id="replyText" placeholder="Nur deine Einschätzung eintippen – Anrede, Fahrzeugbezug und Grußformel werden bei der ersten Antwort automatisch ergänzt."></textarea>
+      <div class="tpls">${tpls.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
+      <textarea id="replyText" placeholder="Nur deine Einschätzung eintippen – Anrede, Fahrzeugbezug und Grußformel werden bei der ersten Antwort automatisch ergänzt.">${esc(getDraft(r.orderId).reply || '')}</textarea>
+      <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
       <div class="file">Optional PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
       <button class="btn" id="sendReply">✉️ Antwort senden</button>
     </div>
@@ -223,7 +271,7 @@ function renderDetail() {
     <div class="section-title">Rechnung / Auskunfts-PDF</div>
     <div class="card">
       <div class="dim small" style="margin-bottom:6px">Eine Zeile pro Teil: <code>Bezeichnung | Teilenummer | Hinweis</code></div>
-      <textarea id="parts" style="min-height:90px">${esc(r.ersatzteile || '')}</textarea>
+      <textarea id="parts" style="min-height:90px">${esc(getDraft(r.orderId).parts != null ? getDraft(r.orderId).parts : (r.ersatzteile || ''))}</textarea>
       <div class="actions"><button class="btn ghost small" id="genPdf">📄 PDF erstellen/aktualisieren</button>
       ${r.pdfLink ? `<a class="btn ghost small" style="text-decoration:none" href="${esc(r.pdfLink)}" target="_blank" rel="noopener">PDF ansehen ↗</a>` : ''}</div>
       ${r.rechnungsnummer ? `<div class="dim small" style="margin-top:8px">Wird automatisch an die nächste Antwort-Mail angehängt.</div>` : ''}
@@ -238,7 +286,19 @@ function renderDetail() {
   document.querySelectorAll('#detail [data-st]').forEach(b => b.addEventListener('click', () => setStatus(r, b.dataset.st, b)));
   $('#sendReply').addEventListener('click', e => sendReply(r, e.currentTarget));
   $('#genPdf').addEventListener('click', e => genPdf(r, e.currentTarget));
-  $('#parts').addEventListener('input', e => { e.target.dataset.dirty = '1'; });
+  $('#parts').addEventListener('input', e => setDraft(r.orderId, { parts: e.target.value }));
+  $('#replyText').addEventListener('input', e => { setDraft(r.orderId, { reply: e.target.value }); $('#draftNote').textContent = e.target.value.trim() ? '💾 Entwurf gespeichert' : ''; });
+  document.querySelectorAll('#detail [data-tpl]').forEach(b => b.addEventListener('click', () => {
+    const t = tpls[+b.dataset.tpl]; if (!t) return;
+    const ta = $('#replyText'), ins = fillTpl(t.x, r);
+    const pos = ta.selectionStart ?? ta.value.length;
+    ta.value = ta.value ? ta.value.slice(0, pos) + (pos && ta.value[pos - 1] !== '\n' ? '\n\n' : '') + ins + ta.value.slice(ta.selectionEnd ?? pos) : ins;
+    ta.dispatchEvent(new Event('input')); ta.focus();
+  }));
+  document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.pl); toast('FIN kopiert – in Partslink24 einfügen', 'good'); } catch (e) {}
+    window.open('https://www.partslink24.com/', '_blank', 'noopener');
+  }));
 }
 
 async function setStatus(r, status, btn) {
@@ -267,7 +327,7 @@ async function sendReply(r, btn) {
     }
     const res = await api({ action: 'reply', orderId: r.orderId, email: r.email, name: r.name, text }, 45000);
     if (!res.ok) throw new Error(res.error);
-    toast('Antwort gesendet ✓', 'good'); $('#replyText').value = ''; await refresh(true); renderDetail();
+    toast('Antwort gesendet ✓', 'good'); $('#replyText').value = ''; setDraft(r.orderId, { reply: undefined }); $('#replyFiles').value = ''; await refresh(true); renderDetail();
   } catch (err) { toast('Senden fehlgeschlagen: ' + err.message, 'bad'); btn.disabled = false; btn.textContent = '✉️ Antwort senden'; }
 }
 async function genPdf(r, btn) {
@@ -275,7 +335,7 @@ async function genPdf(r, btn) {
   try {
     const res = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: $('#parts').value }, 45000);
     if (!res.ok) throw new Error(res.error);
-    toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); delete $('#parts').dataset.dirty; await refresh(true); renderDetail();
+    toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); setDraft(r.orderId, { parts: undefined }); $('#parts').blur(); await refresh(true); renderDetail();
   } catch (err) { toast('Fehler: ' + err.message, 'bad'); }
   finally { btn.disabled = false; btn.textContent = o; }
 }
@@ -314,6 +374,108 @@ function renderRevenue() {
     <p class="dim small">Umsatz ohne Gebühren (PayPal) und als Kleinunternehmer ohne Umsatzsteuer.</p>`;
 }
 
+/* ---------- Push-Benachrichtigungen (Firebase Cloud Messaging) ---------- */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function deviceName() {
+  const u = navigator.userAgent;
+  const dev = /iPhone/.test(u) ? 'iPhone' : (/iPad/.test(u) || (isIOS && /Mac/.test(u))) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Gerät';
+  const br = /Edg\//.test(u) ? 'Edge' : /Chrome\//.test(u) ? 'Chrome' : /Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : '';
+  return dev + (br ? ' · ' + br : '') + (isStandalone ? ' (App)' : '');
+}
+function pushState() {
+  const info = $('#pushInfo'), btn = $('#pushBtn'), tok = store.get('tns_push_token', '');
+  $('#pushTestBtn').hidden = $('#pushOffBtn').hidden = !tok;
+  btn.disabled = false; btn.textContent = '🔔 Auf diesem Gerät aktivieren';
+  if (!pushSupported) {
+    info.textContent = isIOS && !isStandalone
+      ? 'Auf iPhone/iPad gibt es Push nur in der installierten App: in Safari → Teilen → „Zum Home-Bildschirm“, dann die App über das Symbol öffnen und hier aktivieren.'
+      : 'Dieser Browser unterstützt keine Push-Nachrichten.';
+    btn.disabled = true; return;
+  }
+  if (Notification.permission === 'denied') { info.textContent = '⛔ Benachrichtigungen sind für diese Seite blockiert – bitte in den Browser- bzw. Systemeinstellungen erlauben.'; return; }
+  if (tok && Notification.permission === 'granted') { info.textContent = '✅ Aktiv auf diesem Gerät (' + deviceName() + ').'; btn.textContent = 'Neu verbinden'; }
+  else info.textContent = '';
+}
+async function getFcmToken() {
+  const res = await api({ action: 'pushConfig' }, 30000);
+  if (!res.ok) throw new Error(res.error || 'Konfiguration nicht ladbar');
+  const reg = await navigator.serviceWorker.register('sw.js');
+  await navigator.serviceWorker.ready;
+  const fa = await import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app.js`);
+  const fm = await import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-messaging.js`);
+  const app = fa.getApps().length ? fa.getApp() : fa.initializeApp(res.config);
+  return fm.getToken(fm.getMessaging(app), { serviceWorkerRegistration: reg });
+}
+async function registerToken(token) {
+  const r = await api({ action: 'registerPush', token, device: deviceName() });
+  if (!r.ok) throw new Error(r.error || 'Anmeldung fehlgeschlagen');
+  store.set('tns_push_token', token); store.set('tns_push_at', Date.now());
+}
+$('#pushBtn').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  try {
+    const perm = await Notification.requestPermission(); // muss direkt im Klick passieren (iPhone)
+    if (perm !== 'granted') throw new Error('Benachrichtigungen wurden nicht erlaubt');
+    btn.disabled = true; btn.textContent = 'Verbinde …';
+    const token = await getFcmToken();
+    if (!token) throw new Error('kein Push-Token erhalten');
+    await registerToken(token);
+    toast('Push aktiv ✓ – Testnachricht ist unterwegs', 'good');
+    api({ action: 'testPush', token }).catch(() => {});
+  } catch (err) { toast('Push fehlgeschlagen: ' + err.message, 'bad'); }
+  finally { pushState(); }
+});
+$('#pushTestBtn').addEventListener('click', async () => {
+  try {
+    const r = await api({ action: 'testPush', token: store.get('tns_push_token', '') }, 30000);
+    r.ok ? toast('Test gesendet ✓', 'good') : toast('Test fehlgeschlagen: ' + (r.error || ''), 'bad');
+  } catch (err) { toast('Fehler: ' + err.message, 'bad'); }
+});
+$('#pushOffBtn').addEventListener('click', async () => {
+  const tok = store.get('tns_push_token', '');
+  try { await api({ action: 'unregisterPush', token: tok }); } catch (e) {}
+  store.del('tns_push_token'); store.del('tns_push_at'); pushState(); toast('Push auf diesem Gerät deaktiviert');
+});
+// Token wöchentlich auffrischen (Firebase kann ihn erneuern)
+async function refreshPushToken() {
+  const tok = store.get('tns_push_token', '');
+  if (!tok || !pushSupported || Notification.permission !== 'granted') return;
+  if (Date.now() - store.get('tns_push_at', 0) < 7 * 864e5) return;
+  try { const t = await getFcmToken(); if (t) { if (t !== tok) api({ action: 'unregisterPush', token: tok }).catch(() => {}); await registerToken(t); } } catch (e) {}
+}
+
+/* ---------- Textbausteine verwalten ---------- */
+function saveTpls() { store.set('tns_tpl', tpls); }
+function renderTplEditor() {
+  $('#tplList').innerHTML = tpls.map((t, i) => `<div class="tpl-item"><input data-i="${i}" data-k="t" value="${esc(t.t)}" aria-label="Titel">
+    <textarea data-i="${i}" data-k="x" aria-label="Text">${esc(t.x)}</textarea><button class="del" data-del="${i}">Löschen</button></div>`).join('')
+    || '<p class="dim small">Keine Textbausteine.</p>';
+  document.querySelectorAll('#tplList [data-k]').forEach(el => el.addEventListener('input', () => { tpls[+el.dataset.i][el.dataset.k] = el.value; saveTpls(); }));
+  document.querySelectorAll('#tplList [data-del]').forEach(b => b.addEventListener('click', () => {
+    if (!confirm('Textbaustein „' + tpls[+b.dataset.del].t + '“ löschen?')) return;
+    tpls.splice(+b.dataset.del, 1); saveTpls(); renderTplEditor();
+  }));
+}
+$('#tplAdd').addEventListener('click', () => { tpls.push({ t: 'Neuer Baustein', x: '' }); saveTpls(); renderTplEditor(); const ins = document.querySelectorAll('#tplList input'); ins[ins.length - 1].select(); });
+$('#tplReset').addEventListener('click', () => { if (!confirm('Alle Textbausteine auf den Standard zurücksetzen?')) return; tpls = DEFAULT_TPL.map(x => ({ ...x })); saveTpls(); renderTplEditor(); });
+
+/* ---------- Direktsprung aus Push-Nachrichten (#a=<Order-ID>, #postfach) ---------- */
+function handleRoute(h) {
+  h = h || location.hash;
+  if (!h || !adminKey) return;
+  if (h.indexOf('#a=') === 0) openDetail(decodeURIComponent(h.slice(3)));
+  else if (h === '#postfach') { detailId = null; go('postfach'); }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+}
+window.addEventListener('hashchange', () => handleRoute());
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+  const m = e.data || {};
+  if (m.type === 'refresh') refresh(true);
+  if (m.type === 'open') { handleRoute(m.url); refresh(true); }
+});
+
 /* ---------- Installation & Service Worker ---------- */
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; $('#installBtn').hidden = false; });
@@ -328,7 +490,7 @@ setInterval(() => { if (currentView === 'anfragen') renderList(); else if (curre
 
 /* ---------- Start ---------- */
 if (adminKey) {
-  showApp(); render();
-  refresh(true).then(() => { if (!lastSync) toast('Offline – zeige zuletzt geladenen Stand', 'bad'); });
+  showApp(); render(); handleRoute();
+  refresh(true).then(() => { if (!lastSync) toast('Offline – zeige zuletzt geladenen Stand', 'bad'); refreshPushToken(); });
   loadInbox(true);
 } else { showGate(); }
