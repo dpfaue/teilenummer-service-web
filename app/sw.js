@@ -1,7 +1,7 @@
 /* Service Worker – hält die App-Oberfläche offline verfügbar und zeigt Push-Nachrichten an.
    Daten kommen immer frisch vom Server. */
-const CACHE = 'tns-app-v3';
-const SHELL = ['./', 'index.html', 'style.css?v=3', 'app.js?v=3', 'manifest.webmanifest',
+const CACHE = 'tns-app-v4';
+const SHELL = ['./', 'index.html', 'style.css?v=4', 'app.js?v=4', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/favicon-64.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -12,7 +12,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Apps Script, Gmail, Firebase usw. nie cachen
   // Netzwerk zuerst (damit Updates sofort ankommen), bei Offline aus dem Cache
-  e.respondWith(fetch(e.request).then(r => {
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(r => {
     const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: false }).then(m => m || caches.match('index.html'))));
 });

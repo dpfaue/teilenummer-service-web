@@ -1,16 +1,16 @@
 /* Teilenummer.Service – Verwaltungs-App (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.2.0 (22.10.2026)';
+const APP_VERSION = '1.3.0 (22.10.2026)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
 const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
 const DEFAULT_TPL = [
-  { t: 'Teilenummer gefunden', x: 'Hier das Ergebnis für deine FIN {fin}:\n\n{teile}\n\nMit diesen Nummern findest du die Teile bei jedem Teilehändler oder online. Achte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
+  { t: 'Teilenummer gefunden', x: 'Für deine FIN {fin} habe ich folgende Teile ermittelt:\n\n{teile}\n\nSuchbegriffe für Shops: \nBezugsquelle: Originalteil beim Vertragshändler oder meist günstiger bei Teilehändlern und Online-Shops – einfach die Teilenummer ins Suchfeld eingeben.{extras}\n\nAchte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
   { t: 'Mehrere Varianten', x: 'Für deinen {modell} gibt es je nach Ausstattung mehrere Varianten:\n\n1) \n2) \n\nWelche bei dir verbaut ist, erkennst du am einfachsten an: ' },
-  { t: 'Rückfrage', x: 'Damit ich das Teil eindeutig bestimmen kann, brauche ich noch eine Info von dir:\n\n\nAntworte einfach auf diese E-Mail, dann melde ich mich schnellstmöglich mit dem Ergebnis.' },
+  { t: 'Rückfrage', x: 'Damit ich das Teil eindeutig bestimmen kann, brauche ich noch eine Info von dir:\n\n• \n\nSobald ich deine Antwort habe, melde ich mich mit dem Ergebnis.' },
   { t: 'PDF im Anhang', x: 'Alle Teile mit Teilenummern findest du übersichtlich im angehängten PDF. Das PDF ist gleichzeitig deine Rechnung.' },
   { t: 'Nicht ermittelbar', x: 'Leider konnte ich das gesuchte Teil für deinen {modell} nicht eindeutig ermitteln. Grund: \n\nDeshalb erstatte ich dir den vollen Betrag über PayPal – das Geld ist in den nächsten Tagen wieder auf deinem Konto.' }
 ];
@@ -25,6 +25,7 @@ const store = {
 let adminKey = store.get('tns_key', '') || (function () { try { return localStorage.getItem('tns_admin_key') || ''; } catch (e) { return ''; } })();
 let rows = store.get('tns_rows', []);
 let inbox = store.get('tns_inbox', null);
+let mailUnread = store.get('tns_mailunread', 0);
 let filter = store.get('tns_filter', 'offen');
 let currentView = 'anfragen';
 let detailId = null;
@@ -52,6 +53,7 @@ function dueInfo(r) {
   if (ms < 0) return { cls: 'late', txt: 'überfällig seit ' + txt };
   return { cls: ms < 2 * 3600000 ? 'soon' : 'ok', txt: 'Frist in ' + txt };
 }
+function isPaid(r) { return r.status !== 'erstattet' && r.status !== 'Zahlung prüfen' && r.status !== 'Zahlung ausstehend'; }
 function stClass(s) { return 'st-' + String(s || 'offen').replace(/\s+/g, '-'); }
 function toast(msg, kind) {
   const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.hidden = false;
@@ -88,12 +90,15 @@ $('#gateForm').addEventListener('submit', async e => {
     const res = await api({ action: 'list' });
     if (!res.ok) { adminKey = ''; $('#gateError').textContent = 'Falscher Schlüssel.'; return; }
     store.set('tns_key', val);
-    setRows(res.rows); showApp(); render();
+    setRows(res.rows); if (typeof res.mailUnread === 'number') { mailUnread = res.mailUnread; store.set('tns_mailunread', mailUnread); }
+    showApp(); render(); refreshPushToken();
   } catch (err) { $('#gateError').textContent = 'Fehler: ' + err.message; }
 });
 
 $('#logoutBtn').addEventListener('click', () => {
-  if (!confirm('Wirklich abmelden? Der Schlüssel wird von diesem Gerät entfernt.')) return;
+  if (!confirm('Wirklich abmelden? Der Schlüssel wird von diesem Gerät entfernt und Push hier abgeschaltet.')) return;
+  const tok = store.get('tns_push_token', '');
+  if (tok) { api({ action: 'unregisterPush', token: tok }).catch(() => {}); store.del('tns_push_token'); store.del('tns_push_at'); }
   store.del('tns_key'); store.del('tns_rows'); store.del('tns_inbox');
   try { localStorage.removeItem('tns_admin_key'); } catch (e) {}
   adminKey = ''; rows = []; inbox = null; setBadge(0); showGate();
@@ -114,7 +119,8 @@ async function refresh(silent) {
       throw new Error(res.error || 'unbekannter Fehler');
     }
     setRows(res.rows);
-    if (currentView === 'postfach' || inbox) loadInbox(true);
+    if (typeof res.mailUnread === 'number') { mailUnread = res.mailUnread; store.set('tns_mailunread', mailUnread); }
+    if (currentView === 'postfach') loadInbox(true);
     render();
     if (!silent) toast('Aktualisiert', 'good');
   } catch (err) { if (!silent) toast('Laden fehlgeschlagen: ' + err.message, 'bad'); }
@@ -124,7 +130,8 @@ async function loadInbox(silent) {
   try {
     const res = await api({ action: 'inbox' }, 30000);
     if (!res.ok) throw new Error(res.error || 'Fehler');
-    inbox = res.threads || []; store.set('tns_inbox', inbox); renderInbox(); updateBadges();
+    inbox = res.threads || []; store.set('tns_inbox', inbox);
+    mailUnread = inbox.filter(t => t.unread).length; renderInbox(); updateBadges();
   } catch (err) {
     if (!silent) $('#inbox').innerHTML = `<div class="empty">Postfach konnte nicht geladen werden (${esc(err.message)}).</div>`;
   }
@@ -157,7 +164,7 @@ function renderSummary() {
   const open = rows.filter(r => r.status === 'offen' || r.status === 'in Bearbeitung');
   const next = open.filter(r => r.frist).sort((a, b) => new Date(a.frist) - new Date(b.frist))[0];
   const d = next ? dueInfo(next) : null;
-  const paid = rows.filter(r => r.status !== 'erstattet');
+  const paid = rows.filter(isPaid);
   const now = new Date(), sum = a => a.reduce((s, r) => s + (parseFloat(r.preis) || 0), 0);
   const today = paid.filter(r => new Date(r.eingang).toDateString() === now.toDateString());
   const month = paid.filter(r => { const x = new Date(r.eingang); return x.getMonth() === now.getMonth() && x.getFullYear() === now.getFullYear(); });
@@ -197,14 +204,14 @@ function partsForMail(list) {
 function loadParts(r) {
   const d = getDraft(r.orderId);
   curPartsId = r.orderId;
-  curParts = partsParse(d.parts != null ? d.parts : r.ersatzteile);
+  curParts = d.parts === '∅' ? [] : partsParse(d.parts != null ? d.parts : r.ersatzteile);
   if (!curParts.length) curParts = [{ b: '', n: '', h: '' }];
 }
 function partsChanged(r) { return partsText(curParts) !== String(r.ersatzteile || '').trim(); }
 function pdfAktuell(r) { return !!r.pdfLink && !partsChanged(r); }
 function savePartsDraft(r) {
   const t = partsText(curParts);
-  setDraft(r.orderId, { parts: t === String(r.ersatzteile || '').trim() ? undefined : t });
+  setDraft(r.orderId, { parts: t === String(r.ersatzteile || '').trim() ? undefined : (t || '∅') });
   updatePdfState(r);
 }
 function updatePdfState(r) {
@@ -254,15 +261,16 @@ function teileVorschlaege() {
 function fillTpl(text, r) {
   const vorname = String(r.name || '').trim().split(/\s+/)[0] || '';
   const teile = partsForMail(curParts) || '• Bezeichnung: Teilenummer';
-  return text.replace(/\{teile\}/g, teile).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
+  const extras = (r.paket === 'express' || r.paket === 'premium')
+    ? '\n\nPassend dazu (Dichtungen, Schrauben, Zubehör):\n• \n\nDirekte Links:\n• ' : '';
+  return text.replace(/\{teile\}/g, teile).replace(/\{extras\}/g, extras).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
     .replace(/\{fin\}/g, r.fin || '').replace(/\{motor\}/g, r.motor || '');
 }
 
 function updateBadges() {
-  const open = rows.filter(r => r.status === 'offen').length;
+  const open = rows.filter(r => r.status === 'offen' || r.status === 'in Bearbeitung').length;
   const b = $('#badgeOpen'); b.hidden = !open; b.textContent = open;
-  const unreadMail = (inbox || []).filter(t => t.unread).length;
-  const m = $('#badgeMail'); m.hidden = !unreadMail; m.textContent = unreadMail;
+  const m = $('#badgeMail'); m.hidden = !mailUnread; m.textContent = mailUnread;
   setBadge(open + rows.filter(r => r.kundenAntwortUngelesen).length);
   const rep = rows.filter(r => r.kundenAntwortUngelesen).length;
   const bn = $('#replyBanner'); bn.hidden = !rep;
@@ -272,8 +280,10 @@ function setBadge(n) { try { if ('setAppBadge' in navigator) { n ? navigator.set
 
 function renderChips() {
   const count = s => s === 'alle' ? rows.length : rows.filter(r => (r.status || 'offen') === s).length;
-  const labels = { offen: 'Offen', 'in Bearbeitung': 'In Arbeit', beantwortet: 'Beantwortet', erstattet: 'Erstattet', alle: 'Alle' };
-  $('#statusChips').innerHTML = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet', 'alle'].map(s =>
+  const labels = { offen: 'Offen', 'in Bearbeitung': 'In Arbeit', beantwortet: 'Beantwortet', erstattet: 'Erstattet', 'Zahlung prüfen': '⚠️ Zahlung prüfen', alle: 'Alle' };
+  const chips = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet', 'alle'];
+  if (count('Zahlung prüfen')) chips.unshift('Zahlung prüfen');
+  $('#statusChips').innerHTML = chips.map(s =>
     `<button class="chip${filter === s ? ' active' : ''}" data-f="${esc(s)}">${labels[s]}<b>${count(s)}</b></button>`).join('');
   document.querySelectorAll('#statusChips .chip').forEach(c => c.addEventListener('click', () => { filter = c.dataset.f; store.set('tns_filter', filter); renderChips(); renderList(); }));
 }
@@ -351,12 +361,15 @@ function renderDetail() {
     <div class="section-title">② Antworten</div>
     <div class="card">
       <div class="tpls">${tpls.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
-      <textarea id="replyText" placeholder="Nur deine Einschätzung eintippen – Anrede, Fahrzeugbezug und Grußformel werden bei der ersten Antwort automatisch ergänzt.">${esc(getDraft(r.orderId).reply || '')}</textarea>
+      <textarea id="replyText" placeholder="Nur den Inhalt eintippen – „Hallo …“, Bezug zur Anfrage und Grußformel ergänzt das System automatisch (siehe Vorschau).">${esc(getDraft(r.orderId).reply || '')}</textarea>
       <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
-      <label class="check"><input type="checkbox" id="attachPdf" ${(r.status || 'offen') !== 'beantwortet' ? 'checked' : ''}> 📎 Rechnung als PDF anhängen</label>
+      <label class="check"><input type="checkbox" id="attachPdf" ${attachDefault(r) ? 'checked' : ''}> 📎 Rechnung als PDF anhängen</label>
       <div class="pdf-state" id="pdfState"></div>
       <div class="file">Weitere PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
-      <button class="btn" id="sendReply">✉️ Antwort senden</button>
+      <div class="dim small" id="attList"></div>
+      <div class="actions"><button class="btn ghost small" id="previewBtn">👁 Vorschau der Mail</button></div>
+      <div class="box mail-preview" id="mailPreview" hidden></div>
+      <button class="btn" id="sendReply" style="margin-top:10px">✉️ Antwort senden</button>
     </div>
 
     <div class="section-title">Status</div>
@@ -375,14 +388,22 @@ function renderDetail() {
     const ta = $('#replyText');
     insertIntoReply(ta, ta.value.trim() ? list : fillTpl(tpls.find(t => /\{teile\}/.test(t.x))?.x || '{teile}', r));
   });
-  $('#replyFiles').addEventListener('change', e => { if (e.target.files.length) $('#attachPdf').checked = true; });
+  $('#replyFiles').addEventListener('change', e => { if (e.target.files.length) { $('#attachPdf').checked = true; setDraft(r.orderId, { attach: '1' }); } });
+  $('#attachPdf').addEventListener('change', e => setDraft(r.orderId, { attach: e.target.checked ? '1' : '0' }));
+  $('#previewBtn').addEventListener('click', () => {
+    const box = $('#mailPreview'), t = $('#replyText').value.trim();
+    if (!t) return toast('Erst Text eintippen.', 'bad');
+    box.hidden = false;
+    box.textContent = 'An: ' + r.email + '\n' + ($('#attachPdf').checked ? '📎 Rechnung als PDF\n' : '') + '──────────\n' + mailPreview(r, t);
+  });
+  loadAttachments(r);
   $('#replyText').addEventListener('input', e => { setDraft(r.orderId, { reply: e.target.value }); $('#draftNote').textContent = e.target.value.trim() ? '💾 Entwurf gespeichert' : ''; });
   document.querySelectorAll('#detail [data-tpl]').forEach(b => b.addEventListener('click', () => {
     const t = tpls[+b.dataset.tpl]; if (!t) return;
     insertIntoReply($('#replyText'), fillTpl(t.x, r));
   }));
-  document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(b.dataset.pl); toast('FIN kopiert – in Partslink24 einfügen', 'good'); } catch (e) {}
+  document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', () => {
+    try { navigator.clipboard.writeText(b.dataset.pl).then(() => toast('FIN kopiert – in Partslink24 einfügen', 'good'), () => {}); } catch (e) {}
     window.open('https://www.partslink24.com/', '_blank', 'noopener');
   }));
 }
@@ -400,6 +421,39 @@ async function setStatus(r, status, btn) {
 function fileToDataUrl(file) {
   return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('Datei nicht lesbar')); fr.readAsDataURL(file); });
 }
+function attachDefault(r) {
+  const d = getDraft(r.orderId).attach;
+  if (d === '1' || d === '0') return d === '1';
+  return (r.status || 'offen') === 'offen' || r.status === 'in Bearbeitung';
+}
+/* Gleiche Logik wie buildEmailBody_ in Code.gs (bei Änderungen beide anpassen). */
+function mailPreview(r, text) {
+  const vorname = String(r.name || '').trim().split(/\s+/)[0] || '';
+  const first = !r.threadId;
+  const hatAnrede = /^(hallo|hi|hey|moin|servus|guten (tag|morgen|abend)|sehr geehrte)/i.test(text);
+  const hatGruss = /(grüße|gruß|grüsse|gruss|ciao|bis bald)[^\n]*(\n[^\n]*){0,3}$/i.test(text);
+  let out = '';
+  if (!hatAnrede) {
+    out += 'Hallo ' + vorname + ',\n\n';
+    if (first) out += 'danke für deine Anfrage zu deinem ' + (r.modell || 'Fahrzeug') + (r.baujahr ? ' (' + r.baujahr + ')' : '') + '!\n\n';
+  }
+  out += text;
+  if (first) out += '\n\nFalls noch etwas unklar ist, antworte einfach auf diese E-Mail.';
+  if (!hatGruss) out += '\n\nViele Grüße\nDominic\nTeilenummer.Service';
+  return out;
+}
+async function loadAttachments(r) {
+  const el = $('#attList'); if (!el) return;
+  try {
+    const res = await api({ action: 'attachments', orderId: r.orderId }, 30000);
+    if (!res.ok || String(detailId) !== String(r.orderId) || !$('#attList')) return;
+    const other = (res.files || []).filter(n => !/^Rechnung-/.test(n));
+    $('#attList').textContent = other.length ? '📎 Bereits hochgeladen, geht mit Häkchen mit: ' + other.join(', ') : '';
+  } catch (e) {}
+}
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+let pendingSend = null; // { key, sendId, uploaded } – damit ein Wiederholen nach Zeitüberschreitung nicht doppelt sendet
+
 function insertIntoReply(ta, ins) {
   const pos = ta.selectionStart ?? ta.value.length;
   ta.value = ta.value ? ta.value.slice(0, pos) + (pos && ta.value[pos - 1] !== '\n' ? '\n\n' : '') + ins + ta.value.slice(ta.selectionEnd ?? pos) : ins;
@@ -408,7 +462,7 @@ function insertIntoReply(ta, ins) {
 async function sendReply(r, btn) {
   const text = $('#replyText').value.trim();
   if (!text) return toast('Bitte erst eine Antwort eintippen.', 'bad');
-  if (text.length > 6000) return toast('Antwort zu lang (max. ca. 6000 Zeichen) – längere Teile bitte als PDF anhängen.', 'bad');
+  if (text.length > 20000) return toast('Antwort zu lang – längere Teile bitte als PDF anhängen.', 'bad');
   const files = Array.from($('#replyFiles').files || []);
   const attach = $('#attachPdf').checked;
   const needPdf = attach && partsText(curParts) && !pdfAktuell(r);
@@ -416,18 +470,40 @@ async function sendReply(r, btn) {
   if (!confirm(`Antwort an ${r.email} senden?` + (attach ? '\n\n📎 Mit Rechnung als PDF' + (needPdf ? ' (wird jetzt erstellt)' : '') : '\n\nOhne Anhang'))) return;
   btn.disabled = true; btn.textContent = needPdf ? 'Erstelle PDF …' : 'Sende …';
   try {
+    const key = r.orderId + '|' + text + '|' + attach + '|' + files.map(f => f.name + f.size).join(',');
+    if (!pendingSend || pendingSend.key !== key) pendingSend = { key, sendId: rid(), uploaded: false };
+    const stashId = rid();
+    await postNoCors({ kind: 'admin_stash', adminKey, stashId, text, ersatzteile: partsText(curParts) });
     if (needPdf) {
-      const pr = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: partsText(curParts) }, 60000);
+      const pr = await api({ action: 'generatePdf', orderId: r.orderId, stashId }, 60000);
       if (!pr.ok) throw new Error('PDF: ' + (pr.error || 'Fehler'));
       setDraft(r.orderId, { parts: undefined }); r.ersatzteile = partsText(curParts); r.pdfLink = pr.url; r.rechnungsnummer = pr.invoiceNumber;
       btn.textContent = 'Sende …';
     }
-    for (const f of files) {
-      await postNoCors({ kind: 'admin_attachment', adminKey, orderId: r.orderId, filename: f.name, mimeType: f.type || 'application/pdf', dataUrl: await fileToDataUrl(f) });
+    if (attach && files.length && !pendingSend.uploaded) {
+      for (const f of files) {
+        if (f.size > 15 * 1024 * 1024) throw new Error(f.name + ' ist zu groß (max. 15 MB)');
+        await postNoCors({ kind: 'admin_attachment', adminKey, orderId: r.orderId, filename: f.name, mimeType: 'application/pdf', dataUrl: await fileToDataUrl(f) });
+      }
+      const chk = await api({ action: 'attachments', orderId: r.orderId }, 30000);
+      const missing = files.filter(f => !(chk.files || []).includes(f.name));
+      if (missing.length) throw new Error('Anhang nicht angekommen: ' + missing.map(f => f.name).join(', '));
+      pendingSend.uploaded = true;
     }
-    const res = await api({ action: 'reply', orderId: r.orderId, email: r.email, name: r.name, text, attach: attach ? '1' : '0' }, 45000);
+    let res;
+    try {
+      res = await api({ action: 'reply', orderId: r.orderId, email: r.email, name: r.name, stashId, sendId: pendingSend.sendId, attach: attach ? '1' : '0' }, 60000);
+    } catch (netErr) {
+      throw new Error('keine Rückmeldung vom Server (' + netErr.message + '). Die Mail ist evtl. trotzdem raus – nochmal „Senden“ ist sicher, sie geht nicht doppelt.');
+    }
     if (!res.ok) throw new Error(res.error);
-    toast('Antwort gesendet ✓', 'good'); $('#replyText').value = ''; setDraft(r.orderId, { reply: undefined }); $('#replyFiles').value = ''; await refresh(true); renderDetail();
+    pendingSend = null;
+    toast(res.info === 'bereits gesendet' ? 'War schon gesendet ✓' : 'Antwort gesendet ✓', 'good');
+    $('#replyText').value = ''; setDraft(r.orderId, { reply: undefined, attach: undefined }); $('#replyFiles').value = '';
+    await refresh(true); renderDetail();
+    if (/erstatt/i.test(text) && r.status !== 'erstattet' && confirm('Die Antwort erwähnt eine Erstattung.\n\nPayPal jetzt öffnen, um das Geld zurückzuzahlen? (Danach in der App „Als erstattet markieren“.)')) {
+      window.open('https://www.paypal.com/activities', '_blank', 'noopener');
+    }
   } catch (err) { toast('Senden fehlgeschlagen: ' + err.message, 'bad'); btn.disabled = false; btn.textContent = '✉️ Antwort senden'; }
 }
 async function genPdf(r, btn) {
@@ -435,7 +511,9 @@ async function genPdf(r, btn) {
   try {
     const t = partsText(curParts);
     if (!t) throw new Error('Erst mindestens ein Teil eintragen.');
-    const res = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: t }, 60000);
+    const stashId = rid();
+    await postNoCors({ kind: 'admin_stash', adminKey, stashId, text: '', ersatzteile: t });
+    const res = await api({ action: 'generatePdf', orderId: r.orderId, stashId }, 60000);
     if (!res.ok) throw new Error(res.error);
     setDraft(r.orderId, { parts: undefined }); r.ersatzteile = t; r.pdfLink = res.url; r.rechnungsnummer = res.invoiceNumber; updatePdfState(r);
     toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); if (document.activeElement) document.activeElement.blur(); await refresh(true); renderDetail();
@@ -455,7 +533,7 @@ function renderInbox() {
 
 /* ---------- Umsatz ---------- */
 function renderRevenue() {
-  const paid = rows.filter(r => r.status !== 'erstattet');
+  const paid = rows.filter(isPaid);
   const sum = a => a.reduce((s, r) => s + (parseFloat(r.preis) || 0), 0);
   const now = new Date();
   const thisMonth = paid.filter(r => { const d = new Date(r.eingang); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
@@ -595,5 +673,4 @@ setInterval(() => { if (currentView === 'anfragen') renderList(); else if (curre
 if (adminKey) {
   showApp(); render(); handleRoute();
   refresh(true).then(() => { if (!lastSync) toast('Offline – zeige zuletzt geladenen Stand', 'bad'); refreshPushToken(); });
-  loadInbox(true);
 } else { showGate(); }
