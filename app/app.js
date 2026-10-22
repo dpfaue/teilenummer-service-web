@@ -1,14 +1,14 @@
 /* Teilenummer.Service – Verwaltungs-App (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.1.0 (22.10.2026)';
+const APP_VERSION = '1.2.0 (22.10.2026)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
 const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
 const DEFAULT_TPL = [
-  { t: 'Teilenummer gefunden', x: 'Das passende Teil für deine FIN {fin}:\n\nBezeichnung: \nTeilenummer: \nHinweis: \n\nMit dieser Nummer findest du das Teil bei jedem Teilehändler oder online. Achte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
+  { t: 'Teilenummer gefunden', x: 'Hier das Ergebnis für deine FIN {fin}:\n\n{teile}\n\nMit diesen Nummern findest du die Teile bei jedem Teilehändler oder online. Achte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
   { t: 'Mehrere Varianten', x: 'Für deinen {modell} gibt es je nach Ausstattung mehrere Varianten:\n\n1) \n2) \n\nWelche bei dir verbaut ist, erkennst du am einfachsten an: ' },
   { t: 'Rückfrage', x: 'Damit ich das Teil eindeutig bestimmen kann, brauche ich noch eine Info von dir:\n\n\nAntworte einfach auf diese E-Mail, dann melde ich mich schnellstmöglich mit dem Ergebnis.' },
   { t: 'PDF im Anhang', x: 'Alle Teile mit Teilenummern findest du übersichtlich im angehängten PDF. Das PDF ist gleichzeitig deine Rechnung.' },
@@ -175,9 +175,86 @@ function setDraft(id, patch) {
   Object.keys(d).forEach(k => { if (d[k] === undefined || d[k] === '') delete d[k]; });
   Object.keys(d).length ? store.set('tns_draft_' + id, d) : store.del('tns_draft_' + id);
 }
+/* ---------- Teile-Liste (Ergebnis der Recherche): Bezeichnung / Teilenummer / Hinweis ---------- */
+let curParts = [], curPartsId = null;
+const TEIL_VORSCHLAEGE = ['Bremsscheibe vorn links', 'Bremsscheibe vorn rechts', 'Bremsscheibe hinten links', 'Bremsscheibe hinten rechts',
+  'Bremsbeläge vorn (Satz)', 'Bremsbeläge hinten (Satz)', 'Abdeckblech Bremsscheibe', 'Querlenker vorn links', 'Querlenker vorn rechts',
+  'Koppelstange', 'Spurstangenkopf', 'Stoßdämpfer', 'Radlager', 'Thermostat', 'Wasserpumpe', 'Zahnriemensatz', 'Keilrippenriemen',
+  'Ölfilter', 'Luftfilter', 'Innenraumfilter', 'Kraftstofffilter', 'Zündkerze', 'Glühkerze', 'Lambdasonde', 'AGR-Ventil', 'Kühlmittelschlauch'];
+function partsParse(text) {
+  return String(text || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split('|').map(x => x.trim()); return { b: p[0] || '', n: p[1] || '', h: p.slice(2).join(' / ') || '' };
+  });
+}
+function partsText(list) {
+  const clean = x => String(x || '').replace(/\|/g, '/').replace(/\s*\n\s*/g, ' ').trim();
+  return list.filter(p => clean(p.b) || clean(p.n) || clean(p.h))
+    .map(p => [clean(p.b), clean(p.n), clean(p.h)].join(' | ').replace(/(\s\|\s*)+$/, '')).join('\n');
+}
+function partsForMail(list) {
+  return list.filter(p => (p.b || p.n).trim()).map(p => '• ' + (p.b.trim() ? p.b.trim() + ': ' : '') + (p.n.trim() || '(Nummer folgt)') + (p.h.trim() ? ' – ' + p.h.trim() : '')).join('\n');
+}
+function loadParts(r) {
+  const d = getDraft(r.orderId);
+  curPartsId = r.orderId;
+  curParts = partsParse(d.parts != null ? d.parts : r.ersatzteile);
+  if (!curParts.length) curParts = [{ b: '', n: '', h: '' }];
+}
+function partsChanged(r) { return partsText(curParts) !== String(r.ersatzteile || '').trim(); }
+function pdfAktuell(r) { return !!r.pdfLink && !partsChanged(r); }
+function savePartsDraft(r) {
+  const t = partsText(curParts);
+  setDraft(r.orderId, { parts: t === String(r.ersatzteile || '').trim() ? undefined : t });
+  updatePdfState(r);
+}
+function updatePdfState(r) {
+  const el = $('#pdfState'); if (!el) return;
+  const hasParts = !!partsText(curParts);
+  el.className = 'pdf-state' + (pdfAktuell(r) ? ' ok' : '');
+  el.innerHTML = pdfAktuell(r)
+    ? `✓ PDF ${esc(r.rechnungsnummer || '')} ist aktuell · <a href="${esc(r.pdfLink)}" target="_blank" rel="noopener">ansehen ↗</a>`
+    : (r.pdfLink ? '⚠️ Teile geändert – PDF wird beim Senden (mit Häkchen) automatisch aktualisiert' : (hasParts ? 'Noch kein PDF – wird beim Senden (mit Häkchen) automatisch erstellt' : 'Noch keine Teile eingetragen'));
+}
+function renderParts(r, focus) {
+  const box = $('#partsBox'); if (!box) return;
+  box.innerHTML = curParts.map((p, i) => `<div class="prow" data-i="${i}">
+      <span class="pnum">${i + 1}</span>
+      <input class="pb" data-f="b" placeholder="Bezeichnung, z. B. Bremsscheibe vorn links" list="dlTeile" value="${esc(p.b)}" autocomplete="off">
+      <input class="pn" data-f="n" placeholder="Teilenummer" value="${esc(p.n)}" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <input class="ph" data-f="h" placeholder="Hinweis (optional)" value="${esc(p.h)}" autocomplete="off">
+      <span class="pact"><button type="button" data-dup="${i}" title="Zeile kopieren (z. B. links → rechts)">⧉</button><button type="button" data-del="${i}" title="Zeile löschen">✕</button></span>
+    </div>`).join('');
+  box.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => { curParts[+inp.closest('.prow').dataset.i][inp.dataset.f] = inp.value; savePartsDraft(r); });
+    inp.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return; e.preventDefault();
+      const i = +inp.closest('.prow').dataset.i;
+      if (inp.dataset.f !== 'h') { inp.parentElement.querySelector(inp.dataset.f === 'b' ? '.pn' : '.ph').focus(); return; }
+      curParts.splice(i + 1, 0, { b: '', n: '', h: '' }); savePartsDraft(r); renderParts(r, [i + 1, 'b']);
+    });
+  });
+  box.querySelectorAll('[data-dup]').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.dup; const c = { ...curParts[i] };
+    c.b = c.b.replace(/\blinks\b/, '\u0000').replace(/\brechts\b/, 'links').replace('\u0000', 'rechts'); // links ⇄ rechts
+    curParts.splice(i + 1, 0, c); savePartsDraft(r); renderParts(r, [i + 1, 'b']);
+  }));
+  box.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    curParts.splice(+b.dataset.del, 1); if (!curParts.length) curParts = [{ b: '', n: '', h: '' }];
+    savePartsDraft(r); renderParts(r);
+  }));
+  if (focus) { const el = box.querySelector(`.prow[data-i="${focus[0]}"] [data-f="${focus[1]}"]`); if (el) el.focus(); }
+  updatePdfState(r);
+}
+function teileVorschlaege() {
+  const set = new Set(TEIL_VORSCHLAEGE);
+  rows.forEach(x => partsParse(x.ersatzteile).forEach(p => p.b && set.add(p.b)));
+  return [...set].sort((a, b) => a.localeCompare(b, 'de')).map(v => `<option value="${esc(v)}">`).join('');
+}
+
 function fillTpl(text, r) {
   const vorname = String(r.name || '').trim().split(/\s+/)[0] || '';
-  return text.replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
+  const teile = partsForMail(curParts) || '• Bezeichnung: Teilenummer';
+  return text.replace(/\{teile\}/g, teile).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
     .replace(/\{fin\}/g, r.fin || '').replace(/\{motor\}/g, r.motor || '');
 }
 
@@ -259,22 +336,27 @@ function renderDetail() {
     ${r.antwort ? `<div class="section-title">Letzte Antwort (${esc(fmt(r.antwortDatum))})</div><div class="box">${esc(r.antwort)}</div>` : ''}
     ${r.threadId ? `<a class="mail-link${r.kundenAntwortUngelesen ? ' unread' : ''}" href="${gmailThread(r.threadId)}" target="_blank" rel="noopener">${r.kundenAntwortUngelesen ? '🔵 Neue Antwort vom Kunden – in Gmail öffnen ↗' : '📧 Mail-Verlauf in Gmail öffnen ↗'}</a>` : ''}
 
-    <div class="section-title">Antworten</div>
+    <div class="section-title">① Gefundene Teile</div>
+    <div class="card">
+      <datalist id="dlTeile">${teileVorschlaege()}</datalist>
+      <div class="parts" id="partsBox"></div>
+      <div class="actions">
+        <button class="btn ghost small" id="addPart">+ Teil</button>
+        <button class="btn ghost small" id="partsToReply">📝 In Antwort übernehmen</button>
+        <button class="btn ghost small" id="genPdf">📄 PDF jetzt erstellen</button>
+      </div>
+      <div class="dim small" style="margin-top:8px">Tipp: Enter springt ins nächste Feld bzw. legt eine neue Zeile an · ⧉ kopiert eine Zeile und tauscht links/rechts.</div>
+    </div>
+
+    <div class="section-title">② Antworten</div>
     <div class="card">
       <div class="tpls">${tpls.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
       <textarea id="replyText" placeholder="Nur deine Einschätzung eintippen – Anrede, Fahrzeugbezug und Grußformel werden bei der ersten Antwort automatisch ergänzt.">${esc(getDraft(r.orderId).reply || '')}</textarea>
       <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
-      <div class="file">Optional PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
+      <label class="check"><input type="checkbox" id="attachPdf" ${(r.status || 'offen') !== 'beantwortet' ? 'checked' : ''}> 📎 Rechnung als PDF anhängen</label>
+      <div class="pdf-state" id="pdfState"></div>
+      <div class="file">Weitere PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
       <button class="btn" id="sendReply">✉️ Antwort senden</button>
-    </div>
-
-    <div class="section-title">Rechnung / Auskunfts-PDF</div>
-    <div class="card">
-      <div class="dim small" style="margin-bottom:6px">Eine Zeile pro Teil: <code>Bezeichnung | Teilenummer | Hinweis</code></div>
-      <textarea id="parts" style="min-height:90px">${esc(getDraft(r.orderId).parts != null ? getDraft(r.orderId).parts : (r.ersatzteile || ''))}</textarea>
-      <div class="actions"><button class="btn ghost small" id="genPdf">📄 PDF erstellen/aktualisieren</button>
-      ${r.pdfLink ? `<a class="btn ghost small" style="text-decoration:none" href="${esc(r.pdfLink)}" target="_blank" rel="noopener">PDF ansehen ↗</a>` : ''}</div>
-      ${r.rechnungsnummer ? `<div class="dim small" style="margin-top:8px">Wird automatisch an die nächste Antwort-Mail angehängt.</div>` : ''}
     </div>
 
     <div class="section-title">Status</div>
@@ -286,14 +368,18 @@ function renderDetail() {
   document.querySelectorAll('#detail [data-st]').forEach(b => b.addEventListener('click', () => setStatus(r, b.dataset.st, b)));
   $('#sendReply').addEventListener('click', e => sendReply(r, e.currentTarget));
   $('#genPdf').addEventListener('click', e => genPdf(r, e.currentTarget));
-  $('#parts').addEventListener('input', e => setDraft(r.orderId, { parts: e.target.value }));
+  loadParts(r); renderParts(r);
+  $('#addPart').addEventListener('click', () => { curParts.push({ b: '', n: '', h: '' }); savePartsDraft(r); renderParts(r, [curParts.length - 1, 'b']); });
+  $('#partsToReply').addEventListener('click', () => {
+    const list = partsForMail(curParts); if (!list) return toast('Erst mindestens ein Teil eintragen.', 'bad');
+    const ta = $('#replyText');
+    insertIntoReply(ta, ta.value.trim() ? list : fillTpl(tpls.find(t => /\{teile\}/.test(t.x))?.x || '{teile}', r));
+  });
+  $('#replyFiles').addEventListener('change', e => { if (e.target.files.length) $('#attachPdf').checked = true; });
   $('#replyText').addEventListener('input', e => { setDraft(r.orderId, { reply: e.target.value }); $('#draftNote').textContent = e.target.value.trim() ? '💾 Entwurf gespeichert' : ''; });
   document.querySelectorAll('#detail [data-tpl]').forEach(b => b.addEventListener('click', () => {
     const t = tpls[+b.dataset.tpl]; if (!t) return;
-    const ta = $('#replyText'), ins = fillTpl(t.x, r);
-    const pos = ta.selectionStart ?? ta.value.length;
-    ta.value = ta.value ? ta.value.slice(0, pos) + (pos && ta.value[pos - 1] !== '\n' ? '\n\n' : '') + ins + ta.value.slice(ta.selectionEnd ?? pos) : ins;
-    ta.dispatchEvent(new Event('input')); ta.focus();
+    insertIntoReply($('#replyText'), fillTpl(t.x, r));
   }));
   document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(b.dataset.pl); toast('FIN kopiert – in Partslink24 einfügen', 'good'); } catch (e) {}
@@ -314,18 +400,32 @@ async function setStatus(r, status, btn) {
 function fileToDataUrl(file) {
   return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('Datei nicht lesbar')); fr.readAsDataURL(file); });
 }
+function insertIntoReply(ta, ins) {
+  const pos = ta.selectionStart ?? ta.value.length;
+  ta.value = ta.value ? ta.value.slice(0, pos) + (pos && ta.value[pos - 1] !== '\n' ? '\n\n' : '') + ins + ta.value.slice(ta.selectionEnd ?? pos) : ins;
+  ta.dispatchEvent(new Event('input')); ta.focus();
+}
 async function sendReply(r, btn) {
   const text = $('#replyText').value.trim();
   if (!text) return toast('Bitte erst eine Antwort eintippen.', 'bad');
   if (text.length > 6000) return toast('Antwort zu lang (max. ca. 6000 Zeichen) – längere Teile bitte als PDF anhängen.', 'bad');
   const files = Array.from($('#replyFiles').files || []);
-  if (!confirm(`Antwort an ${r.email} senden?`)) return;
-  btn.disabled = true; btn.textContent = 'Sende …';
+  const attach = $('#attachPdf').checked;
+  const needPdf = attach && partsText(curParts) && !pdfAktuell(r);
+  if (attach && !partsText(curParts) && !r.pdfLink && !files.length) return toast('Für die Rechnung erst Teile eintragen – oder das Häkchen „Rechnung anhängen“ entfernen.', 'bad');
+  if (!confirm(`Antwort an ${r.email} senden?` + (attach ? '\n\n📎 Mit Rechnung als PDF' + (needPdf ? ' (wird jetzt erstellt)' : '') : '\n\nOhne Anhang'))) return;
+  btn.disabled = true; btn.textContent = needPdf ? 'Erstelle PDF …' : 'Sende …';
   try {
+    if (needPdf) {
+      const pr = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: partsText(curParts) }, 60000);
+      if (!pr.ok) throw new Error('PDF: ' + (pr.error || 'Fehler'));
+      setDraft(r.orderId, { parts: undefined }); r.ersatzteile = partsText(curParts); r.pdfLink = pr.url; r.rechnungsnummer = pr.invoiceNumber;
+      btn.textContent = 'Sende …';
+    }
     for (const f of files) {
       await postNoCors({ kind: 'admin_attachment', adminKey, orderId: r.orderId, filename: f.name, mimeType: f.type || 'application/pdf', dataUrl: await fileToDataUrl(f) });
     }
-    const res = await api({ action: 'reply', orderId: r.orderId, email: r.email, name: r.name, text }, 45000);
+    const res = await api({ action: 'reply', orderId: r.orderId, email: r.email, name: r.name, text, attach: attach ? '1' : '0' }, 45000);
     if (!res.ok) throw new Error(res.error);
     toast('Antwort gesendet ✓', 'good'); $('#replyText').value = ''; setDraft(r.orderId, { reply: undefined }); $('#replyFiles').value = ''; await refresh(true); renderDetail();
   } catch (err) { toast('Senden fehlgeschlagen: ' + err.message, 'bad'); btn.disabled = false; btn.textContent = '✉️ Antwort senden'; }
@@ -333,9 +433,12 @@ async function sendReply(r, btn) {
 async function genPdf(r, btn) {
   btn.disabled = true; const o = btn.textContent; btn.textContent = 'Erstelle …';
   try {
-    const res = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: $('#parts').value }, 45000);
+    const t = partsText(curParts);
+    if (!t) throw new Error('Erst mindestens ein Teil eintragen.');
+    const res = await api({ action: 'generatePdf', orderId: r.orderId, ersatzteile: t }, 60000);
     if (!res.ok) throw new Error(res.error);
-    toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); setDraft(r.orderId, { parts: undefined }); $('#parts').blur(); await refresh(true); renderDetail();
+    setDraft(r.orderId, { parts: undefined }); r.ersatzteile = t; r.pdfLink = res.url; r.rechnungsnummer = res.invoiceNumber; updatePdfState(r);
+    toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); if (document.activeElement) document.activeElement.blur(); await refresh(true); renderDetail();
   } catch (err) { toast('Fehler: ' + err.message, 'bad'); }
   finally { btn.disabled = false; btn.textContent = o; }
 }
