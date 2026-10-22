@@ -1,7 +1,7 @@
 /* Teilenummer.Service – Verwaltungs-App (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.3.0 (22.10.2026)';
+const APP_VERSION = '1.3.1 (22.10.2026)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
@@ -421,6 +421,21 @@ async function setStatus(r, status, btn) {
 function fileToDataUrl(file) {
   return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('Datei nicht lesbar')); fr.readAsDataURL(file); });
 }
+/* Leere Stellen aus Textbausteinen finden (z. B. "Grund:" ohne Text, leere Aufzählungspunkte). */
+function findLuecken(text) {
+  const lines = text.split('\n'), out = [];
+  const kurz = x => x.trim().split(/(?<=[.!?])\s+/).pop().slice(0, 45);
+  lines.forEach((l, i) => {
+    const t = l.trim();
+    if (/^(•|-|\d+\))$/.test(t)) { out.push('leerer Aufzählungspunkt unter „' + kurz(lines.slice(0, i).reverse().find(x => x.trim()) || '') + '“'); return; }
+    if (/:$/.test(t)) {
+      const next = lines.slice(i + 1).find(x => x.trim());
+      if (!next || !/^\s*(•|-|\d+\)|>)/.test(next)) out.push('„' + kurz(t) + '“ ohne Inhalt');
+    }
+    if (/\{[a-z]+\}|Bezeichnung: Teilenummer/.test(t)) out.push('Platzhalter „' + t.slice(0, 40) + '“');
+  });
+  return [...new Set(out)];
+}
 function attachDefault(r) {
   const d = getDraft(r.orderId).attach;
   if (d === '1' || d === '0') return d === '1';
@@ -467,6 +482,8 @@ async function sendReply(r, btn) {
   const attach = $('#attachPdf').checked;
   const needPdf = attach && partsText(curParts) && !pdfAktuell(r);
   if (attach && !partsText(curParts) && !r.pdfLink && !files.length) return toast('Für die Rechnung erst Teile eintragen – oder das Häkchen „Rechnung anhängen“ entfernen.', 'bad');
+  const luecken = findLuecken(text);
+  if (luecken.length && !confirm('In der Antwort ist noch etwas nicht ausgefüllt:\n\n• ' + luecken.join('\n• ') + '\n\nTrotzdem so senden?')) return;
   if (!confirm(`Antwort an ${r.email} senden?` + (attach ? '\n\n📎 Mit Rechnung als PDF' + (needPdf ? ' (wird jetzt erstellt)' : '') : '\n\nOhne Anhang'))) return;
   btn.disabled = true; btn.textContent = needPdf ? 'Erstelle PDF …' : 'Sende …';
   try {
