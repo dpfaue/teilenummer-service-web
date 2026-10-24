@@ -394,6 +394,24 @@ const quelle = (function () {
   return q || 'direkt';
 })();
 
+// --- Trichter: anonym zählen, bis zu welchem Schritt ein Besuch kommt (keine Eingaben, keine Cookies) ---
+const visitId = newId();
+const funnelSent = {};
+function funnel(step) {
+  if (funnelSent[step] || navigator.webdriver) return;
+  funnelSent[step] = true;
+  try {
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', keepalive: true,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ kind: 'funnel', visit: visitId, step, quelle,
+        plan: selectedPlan ? selectedPlan.key : '',
+        device: window.matchMedia && matchMedia('(max-width: 700px)').matches ? 'mobil' : 'desktop' })
+    }).catch(() => {});
+  } catch (e) {}
+}
+funnel('1 Seite geöffnet');
+
 // --- Live/Offline-Status je nach Servicezeiten (8–20 Uhr, deutsche Zeit) ---
 function updateStatusBadge() {
   const badge = document.getElementById('statusBadge');
@@ -423,8 +441,8 @@ function selectPlan(key) {
   });
   document.getElementById('planField').classList.remove('need');
 }
-document.querySelectorAll('.plan').forEach(card => card.addEventListener('click', () => selectPlan(card.dataset.plan)));
-document.querySelectorAll('.pp').forEach(btn => btn.addEventListener('click', () => selectPlan(btn.dataset.plan)));
+document.querySelectorAll('.plan').forEach(card => card.addEventListener('click', () => { selectPlan(card.dataset.plan); funnel('2 Paket gewählt'); }));
+document.querySelectorAll('.pp').forEach(btn => btn.addEventListener('click', () => { selectPlan(btn.dataset.plan); funnel('2 Paket gewählt'); }));
 try { const p = new URLSearchParams(location.search).get('paket'); if (p) selectPlan(p); } catch (e) {}
 
 // --- FIN immer in Großbuchstaben ---
@@ -471,7 +489,7 @@ photoInput.addEventListener('change', async () => {
   fileDrop.textContent = 'Fotos werden verarbeitet…';
   let failed = 0;
   for (const f of take) {
-    try { photos.push({ dataUrl: await compressImage(f, 1400, 0.72) }); photosChanged = true; }
+    try { photos.push({ dataUrl: await compressImage(f, 1400, 0.72) }); photosChanged = true; funnel('4 Foto hinzugefügt'); }
     catch (e) { failed++; }
   }
   renderPhotos();
@@ -529,6 +547,7 @@ function post(payload) {
 // --- Validierung + Wechsel zur Zahlung ---
 const form = document.getElementById('reqform');
 const errorBox = document.getElementById('errorBox');
+form.addEventListener('input', () => funnel('3 Formular begonnen'));
 
 document.getElementById('toStage2').addEventListener('click', () => {
   errorBox.style.display = 'none';
@@ -538,6 +557,7 @@ document.getElementById('toStage2').addEventListener('click', () => {
   }
   if (!form.checkValidity()) { form.reportValidity(); return; }
   if (photos.length === 0) return showError('Bitte mindestens ein Foto hochladen.');
+  funnel('5 Weiter zur Zahlung');
 
   // Formular vor der Zahlung sichern (Fotos nur, wenn sie sich geändert haben)
   const payload = Object.assign({ kind: 'request' }, formData(), { photos: photosChanged ? photos.map(p => p.dataUrl) : [] });
@@ -570,13 +590,13 @@ function renderPaypalButton() {
   paypalRendered = true;
   paypal.Buttons({
     style: { layout: 'vertical', color: 'gold', shape: 'pill', label: 'buynow' },
-    createOrder: (data, actions) => actions.order.create({
+    createOrder: (data, actions) => (funnel('6 PayPal geöffnet'), actions.order.create({
       purchase_units: [{
         amount: { value: selectedPlan.price, currency_code: 'EUR' },
         description: 'Teilenummer.Service – Paket ' + PLANS[selectedPlan.key].label,
         custom_id: requestId
       }]
-    }),
+    })),
     onApprove: async (data, actions) => {
       const order = await actions.order.capture();
       await submitPaid(order);
@@ -593,6 +613,7 @@ function renderPaypalButton() {
 
 // --- Nach der Zahlung: Anfrage als bezahlt melden (inkl. aller Daten als Rückfallebene) ---
 async function submitPaid(order) {
+  funnel('7 Bezahlt');
   const payload = Object.assign({ kind: 'paid' }, formData(), {
     photos: photos.map(p => p.dataUrl),
     paypalOrderId: order.id,
