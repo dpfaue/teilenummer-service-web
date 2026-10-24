@@ -411,6 +411,15 @@ function funnel(step) {
   } catch (e) {}
 }
 funnel('1 Seite geöffnet');
+try {
+  const pk = document.getElementById('pakete');
+  if (pk && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => {
+      if (es.some(x => x.isIntersecting)) { funnel('1b Preise gesehen'); io.disconnect(); }
+    }, { threshold: 0.2 });
+    io.observe(pk);
+  }
+} catch (e) {}
 
 // --- Live/Offline-Status je nach Servicezeiten (8–20 Uhr, deutsche Zeit) ---
 function updateStatusBadge() {
