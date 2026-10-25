@@ -15,11 +15,12 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="style.css?v=6">
 <style>
-  .tabs{grid-template-columns:repeat(5,1fr)!important}
+  @media (max-width:899px){.tabs{grid-template-columns:repeat(5,1fr)}}
   #bereichSel{background:var(--card,#1b1f2b);color:inherit;border:1px solid var(--border,#2a2f3d);border-radius:10px;padding:6px 8px;font-size:14px;max-width:46vw}
   #view-buch{padding:0!important;margin:0 -16px}
   @media (max-width:520px){#syncInfo{display:none}}
   #buchFrame{display:block;width:100%;border:0;height:calc(100dvh - 128px - env(safe-area-inset-bottom));background:transparent}
+  @media (min-width:900px){#view-buch{margin:-22px -32px -40px;max-width:none}#buchFrame{height:calc(100dvh - 62px)}}
 </style>
 </head>
 <body>
