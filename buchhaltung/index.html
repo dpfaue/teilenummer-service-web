@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Teilenummer – Buchhaltung</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Buchhaltung">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+<section id="gate" class="gate" hidden>
+  <img src="icons/icon-192.png" alt="" class="gate-logo">
+  <h1>Buchhaltung</h1>
+  <p class="dim">Einnahmen &amp; Ausgaben von Teilenummer.Service. Anmeldung mit demselben Admin-Schlüssel wie die Verwaltungs-App.</p>
+  <form id="gateForm">
+    <input type="password" id="keyInput" placeholder="Admin-Schlüssel" autocomplete="current-password" required>
+    <button type="submit" class="btn">Anmelden</button>
+  </form>
+  <div id="gateError" class="err"></div>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><img src="icons/favicon-64.png" alt=""><span>Buchhaltung</span></div>
+    <div class="top-right">
+      <select id="yearSel" aria-label="Jahr"></select>
+      <button id="refreshBtn" class="icon-btn" title="Aktualisieren" aria-label="Aktualisieren">↻</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Übersicht -->
+    <section id="v-start" class="view">
+      <div class="kpis">
+        <div class="kpi"><span>Einnahmen</span><b id="kEin">–</b></div>
+        <div class="kpi"><span>Ausgaben</span><b id="kAus">–</b></div>
+        <div class="kpi big"><span>Gewinn</span><b id="kGew">–</b></div>
+      </div>
+
+      <div id="vorBox" class="vorbox" hidden>
+        <h2 id="vorschlaege">🧾 <span id="vorTitle"></span></h2>
+        <p class="dim small">Aus deinen E-Mails erkannt. Kurz prüfen und übernehmen.</p>
+        <div id="vorList"></div>
+      </div>
+
+      <div class="actions">
+        <label class="act primary">📷 Beleg fotografieren
+          <input type="file" id="camInput" accept="image/*" capture="environment" hidden></label>
+        <label class="act">📄 Datei / PDF
+          <input type="file" id="fileInput" accept="image/*,application/pdf" hidden></label>
+        <button class="act" id="addAus">➖ Ausgabe ohne Beleg</button>
+        <button class="act" id="addEin">➕ Einnahme</button>
+      </div>
+
+      <div class="hint">
+        <b>Automatisch:</b> Verkäufe über die Website (mit PayPal-Gebühr und Erstattungen) werden selbst gebucht.
+        Rechnungen per E-Mail einfach an <b>teilenummer.service@gmail.com</b> weiterleiten – sie erscheinen hier als Vorschlag.
+      </div>
+
+      <h3 class="sec">Zuletzt</h3>
+      <div id="recentList"></div>
+      <div id="syncInfo" class="dim small center"></div>
+    </section>
+
+    <!-- Buchungen -->
+    <section id="v-list" class="view" hidden>
+      <input type="search" id="search" placeholder="Suchen (Partner, Beschreibung, Betrag) …">
+      <div class="chips" id="artChips">
+        <button data-f="alle" class="chip on">Alle</button>
+        <button data-f="Einnahme" class="chip">Einnahmen</button>
+        <button data-f="Ausgabe" class="chip">Ausgaben</button>
+        <button data-f="ohne" class="chip">Ohne Beleg</button>
+      </div>
+      <div id="fullList"></div>
+    </section>
+
+    <!-- Auswertung -->
+    <section id="v-report" class="view" hidden>
+      <h2>Anlage EÜR <span id="rYear"></span></h2>
+      <p class="dim small">Diese Werte trägst du in die Anlage EÜR (ELSTER) ein. Als Kleinunternehmer alles brutto.</p>
+      <div id="euerTable"></div>
+      <div id="rWarn"></div>
+      <h3 class="sec">Nach Kategorie</h3>
+      <div id="katTable"></div>
+      <div class="actions col">
+        <button class="act primary" id="exportBtn">📦 PDF + alle Belege (ZIP) erstellen</button>
+        <button class="act" id="csvBtn">⬇️ Tabelle als CSV herunterladen</button>
+        <a class="act" id="sheetLink" target="_blank" rel="noopener">📊 Google-Tabelle öffnen</a>
+        <a class="act" id="folderLink" target="_blank" rel="noopener">📁 Belege-Ordner öffnen</a>
+      </div>
+      <div id="exportOut"></div>
+      <p class="dim small">Hinweis: keine Steuerberatung. Bei Unklarheiten (z. B. Reverse Charge) kurz beim Finanzamt nachfragen.</p>
+      <p class="dim small center"><button id="logoutBtn" class="link">Abmelden</button></p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-v="start" class="on">🏠<span>Übersicht</span></button>
+    <button data-v="list">📒<span>Buchungen</span></button>
+    <button data-v="report">📊<span>Auswertung</span></button>
+  </nav>
+</div>
+
+<!-- Erfassen / Bearbeiten -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <b id="sheetTitle">Buchung</b>
+      <button class="icon-btn" id="sheetClose" aria-label="Schließen">✕</button>
+    </div>
+    <div id="belegState" class="belegstate" hidden></div>
+    <form id="bForm">
+      <div class="seg">
+        <label><input type="radio" name="art" value="Ausgabe" checked><span>Ausgabe</span></label>
+        <label><input type="radio" name="art" value="Einnahme"><span>Einnahme</span></label>
+      </div>
+      <div class="row2">
+        <label>Betrag (€)<input id="fBetrag" inputmode="decimal" placeholder="0,00" required></label>
+        <label>Datum<input type="date" id="fDatum" required></label>
+      </div>
+      <label>Bei wem / von wem<input id="fPartner" placeholder="z. B. Google, Amazon, Kunde"></label>
+      <label>Kategorie<select id="fKat"></select></label>
+      <label>Wofür<input id="fBeschr" placeholder="z. B. Druckerpapier, Google Ads Oktober"></label>
+      <div class="row2">
+        <label>Bezahlt mit<select id="fZahl">
+          <option>PayPal</option><option>Karte</option><option>Überweisung</option><option>Lastschrift</option><option>Bar</option><option value="">–</option>
+        </select></label>
+        <label class="chk"><input type="checkbox" id="fRc"> Reverse Charge<small>Rechnung ohne MwSt. aus dem EU-Ausland</small></label>
+      </div>
+      <label>Notiz<input id="fNotiz" placeholder="optional"></label>
+      <div class="sheet-actions">
+        <button type="submit" class="btn" id="saveBtn">Speichern</button>
+        <button type="button" class="btn ghost danger" id="delBtn" hidden>Entfernen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script src="app.js?v=1"></script>
+</body>
+</html>
