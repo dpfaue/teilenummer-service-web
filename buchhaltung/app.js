@@ -1,16 +1,20 @@
-/* Teilenummer.Service – Buchhaltung (PWA)
+/* Buchhaltung für alle Bereiche (Teilenummer, Heizung, Handwerker-Mappe) – PWA, auch eingebettet in die Zentrale
    Gleiche Apps-Script-Schnittstelle wie die Verwaltungs-App (JSONP + Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.0 (25.10.2026)';
+const APP_VERSION = '2.0 (25.10.2026, Bereiche)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const KAT_FALLBACK = {
-  Einnahme: ['Verkäufe (Teilenummer)', 'Sonstige Einnahmen'],
+  Einnahme: ['Verkäufe (Teilenummer)', 'Verkäufe (Heizung-Störung)', 'Verkäufe (Vorlagen)', 'Sonstige Einnahmen'],
   Ausgabe: ['Werbung (z. B. Google Ads)', 'Gebühren (PayPal, Bank)', 'Software & Online-Dienste', 'Bürobedarf & Porto',
     'Telefon & Internet', 'Fremdleistungen', 'Arbeitsmittel bis 800 € netto', 'Fachliteratur & Fortbildung',
     'Versicherungen & Beiträge', 'Steuerberatung & Buchführung', 'Sonstige Betriebsausgaben']
 };
 
+const BER_FALLBACK = { teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', allgemein: '🏢 Allgemein' };
 const $ = s => document.querySelector(s);
+const qs = new URLSearchParams(location.search);
+const EMBED = qs.get('embed') === '1';
+if (EMBED) document.body.classList.add('embed');
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
@@ -20,6 +24,20 @@ let adminKey = store.get('tns_key', '');           // gleicher Schlüssel wie di
 let year = store.get('buch_year', new Date().getFullYear());
 let data = store.get('buch_cache_' + year, null);
 let listFilter = 'alle';
+let bereich = qs.get('bereich') || store.get('buch_bereich', 'alle');
+function BER() { return (data && data.bereiche) || BER_FALLBACK; }
+function berName(k) { return k === 'alle' ? 'Alle Bereiche' : (BER()[k] || k); }
+function berIcon(k) { return String(BER()[k] || '').split(' ')[0]; }
+function vis(list) { return bereich === 'alle' ? (list || []) : (list || []).filter(b => (b.bereich || 'teilenummer') === bereich); }
+function sumUp(list) {
+  let e = 0, a = 0; list.forEach(b => { if (b.art === 'Einnahme') e += b.betrag; else a += b.betrag; });
+  const r2 = x => Math.round(x * 100) / 100; return { einnahmen: r2(e), ausgaben: r2(a), gewinn: r2(e - a) };
+}
+function setBereich(k, fromParent) {
+  bereich = BER()[k] || k === 'alle' ? k : 'alle'; store.set('buch_bereich', bereich); render();
+  if (!fromParent && EMBED) try { parent.postMessage({ bereich }, location.origin); } catch (e) {}
+}
+window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.bereich) setBereich(e.data.bereich, true); });
 let editing = null;      // { id?, vorschlag? }
 let upload = null;       // { id, promise, fileId }
 
@@ -111,18 +129,23 @@ function itemHtml(b) {
   const nob = !b.belegLink && !/\(auto\)/.test(b.quelle || '');
   return `<div class="item" data-id="${esc(b.id)}">
     <div><div class="t">${esc(b.partner || b.kategorie)}</div>
-      <div class="s">${dDe(b.datum)} · ${esc(b.kategorie)}${b.beschreibung ? ' · ' + esc(b.beschreibung) : ''}${nob ? ' <span class="nobeleg">· ohne Beleg</span>' : ''}</div></div>
+      <div class="s">${bereich === 'alle' ? '<span class="bi">' + berIcon(b.bereich) + '</span>' : ''}${dDe(b.datum)} · ${esc(b.kategorie)}${b.beschreibung ? ' · ' + esc(b.beschreibung) : ''}${nob ? ' <span class="nobeleg">· ohne Beleg</span>' : ''}</div></div>
     <div class="b ${ein ? 'ein' : ''}">${ein ? '' : '− '}${euro(b.betrag)}</div></div>`;
 }
 function render() {
   if (!data) return;
   const yrs = (data.jahre && data.jahre.length ? data.jahre : [String(year)]);
   $('#yearSel').innerHTML = yrs.map(y => `<option ${String(y) === String(year) ? 'selected' : ''}>${y}</option>`).join('');
-  const r = data.report || {};
+  $('#berSel').innerHTML = ['alle'].concat(Object.keys(BER())).map(k => `<option value="${k}" ${k === bereich ? 'selected' : ''}>${esc(k === 'alle' ? 'Alle Bereiche' : BER()[k])}</option>`).join('');
+  const r = bereich === 'alle' ? (data.report || {}) : sumUp(vis(data.rows));
+  $('#berLabel').textContent = bereich === 'alle' ? 'Alle Bereiche zusammen – so zählt es fürs Finanzamt.' : berName(bereich) + ' – nur dieser Bereich (' + year + ').';
+  const rb = (data.report && data.report.bereiche) || {};
+  $('#berBox').innerHTML = bereich !== 'alle' || !Object.keys(rb).length ? '' : '<h3 class="sec">Nach Bereich</h3><div class="kpis">' +
+    Object.keys(BER()).filter(k => rb[k]).map(k => `<button class="kpi" data-ber="${k}" style="text-align:left;cursor:pointer;color:inherit"><span>${esc(BER()[k])}</span><b class="${rb[k].gewinn >= 0 ? 'pos' : 'neg'}">${euro(rb[k].gewinn)}</b><span>+${euro(rb[k].einnahmen)} / −${euro(rb[k].ausgaben)}</span></button>`).join('') + '</div>';
   $('#kEin').textContent = euro(r.einnahmen); $('#kAus').textContent = euro(r.ausgaben);
   $('#kGew').textContent = euro(r.gewinn); $('#kGew').className = (r.gewinn || 0) >= 0 ? 'pos' : 'neg';
   // Vorschläge
-  const v = data.vorschlaege || [];
+  const v = vis(data.vorschlaege);
   $('#vorBox').hidden = !v.length;
   $('#vorTitle').textContent = v.length === 1 ? '1 Beleg wartet auf Bestätigung' : v.length + ' Belege warten auf Bestätigung';
   $('#vorList').innerHTML = v.map(b => `<div class="vor" data-id="${esc(b.id)}">
@@ -132,13 +155,13 @@ function render() {
       ${b.belegLink ? `<a class="btn ghost" href="${esc(b.belegLink)}" target="_blank" rel="noopener">Beleg</a>` : ''}
       <button class="btn ghost danger" data-a="no">✕</button></div></div>`).join('');
   // Zuletzt
-  const rows = data.rows || [];
+  const rows = vis(data.rows);
   $('#recentList').innerHTML = rows.slice(0, 6).map(itemHtml).join('') || '<p class="dim small">Noch keine Buchungen in ' + year + '.</p>';
   renderList(); renderReport();
 }
 function renderList() {
   const q = ($('#search').value || '').toLowerCase().trim();
-  let rows = (data && data.rows) || [];
+  let rows = vis((data && data.rows) || []);
   if (listFilter === 'Einnahme' || listFilter === 'Ausgabe') rows = rows.filter(b => b.art === listFilter);
   if (listFilter === 'ohne') rows = rows.filter(b => !b.belegLink && !/\(auto\)/.test(b.quelle || ''));
   if (q) rows = rows.filter(b => [b.partner, b.beschreibung, b.kategorie, b.notiz, String(b.betrag).replace('.', ',')].join(' ').toLowerCase().includes(q));
@@ -164,6 +187,10 @@ function renderReport() {
   if (r.ohneBeleg) w += `<div class="warn">⚠️ ${r.ohneBeleg} Buchung(en) ohne Beleg – unter „Buchungen → Ohne Beleg“ nachreichen, falls vorhanden.</div>`;
   if (r.reverseCharge) w += `<div class="warn">⚠️ Reverse Charge: ${euro(r.reverseCharge)} Ausgaben ohne MwSt. aus dem EU-Ausland. Darauf schuldest du ca. ${euro(r.ustReverseCharge)} Umsatzsteuer (Voranmeldung/Erklärung).</div>`;
   $('#rWarn').innerHTML = w;
+  const rb = r.bereiche || {};
+  $('#berTable').innerHTML = '<table class="bertab"><tr><td></td><td class="r dim small">Einnahmen</td><td class="r dim small">Ausgaben</td><td class="r dim small">Ergebnis</td></tr>' +
+    Object.keys(BER()).filter(k => rb[k]).map(k => `<tr><td>${esc(BER()[k])}</td><td class="r">${euro(rb[k].einnahmen)}</td><td class="r">${euro(rb[k].ausgaben)}</td><td class="r"><b>${euro(rb[k].gewinn)}</b></td></tr>`).join('') +
+    `<tr><td><b>Gesamt</b></td><td class="r">${euro(r.einnahmen)}</td><td class="r">${euro(r.ausgaben)}</td><td class="r"><b>${euro(r.gewinn)}</b></td></tr></table>`;
   const kt = Object.entries(r.kategorien || {}).sort();
   $('#katTable').innerHTML = '<table>' + kt.map(([k, v]) => { const [art, kat] = k.split('|'); return `<tr><td>${art === 'Einnahme' ? '➕' : '➖'} ${esc(kat)}</td><td class="r">${euro(v)}</td></tr>`; }).join('') + '</table>';
   if (data && data.sheetUrl) { $('#sheetLink').href = data.sheetUrl; $('#folderLink').href = data.folderUrl; }
@@ -179,6 +206,8 @@ function showView(v) {
 $('#refreshBtn').addEventListener('click', () => { load(); sync(); });
 $('#yearSel').addEventListener('change', e => { year = Number(e.target.value); store.set('buch_year', year); data = store.get('buch_cache_' + year, data); render(); load(); });
 $('#search').addEventListener('input', renderList);
+$('#berSel').addEventListener('change', e => setBereich(e.target.value));
+document.addEventListener('click', e => { const k = e.target.closest('[data-ber]'); if (k) setBereich(k.dataset.ber); });
 $('#artChips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
   listFilter = b.dataset.f; document.querySelectorAll('#artChips .chip').forEach(c => c.classList.toggle('on', c === b)); renderList();
@@ -210,6 +239,8 @@ function openSheet(b, opts) {
   $('#fPartner').value = b.partner || ''; $('#fBeschr').value = b.beschreibung || ''; $('#fNotiz').value = b.notiz || '';
   $('#fZahl').value = b.zahlungsart ?? store.get('buch_zahl', 'PayPal');
   $('#fRc').checked = !!b.rc;
+  const bdef = b.bereich || (bereich !== 'alle' ? bereich : (b.art === 'Einnahme' ? 'teilenummer' : 'allgemein'));
+  $('#fBereich').innerHTML = Object.keys(BER()).map(k => `<option value="${k}" ${k === bdef ? 'selected' : ''}>${esc(BER()[k])}</option>`).join('');
   $('#delBtn').hidden = !b.id;
   const auto = /auto/.test(b.quelle || '');
   $('#belegState').hidden = !(b.belegLink || auto || opts.state);
@@ -226,7 +257,7 @@ function formValues() {
   return {
     art: document.querySelector('input[name=art]:checked').value, betrag: $('#fBetrag').value.trim(), datum: $('#fDatum').value,
     partner: $('#fPartner').value.trim(), kategorie: $('#fKat').value, beschreibung: $('#fBeschr').value.trim(),
-    zahlungsart: $('#fZahl').value, notiz: $('#fNotiz').value.trim(), rc: $('#fRc').checked ? '1' : ''
+    zahlungsart: $('#fZahl').value, notiz: $('#fNotiz').value.trim(), rc: $('#fRc').checked ? '1' : '', bereich: $('#fBereich').value
   };
 }
 $('#bForm').addEventListener('submit', async e => {
@@ -254,7 +285,7 @@ $('#bForm').addEventListener('submit', async e => {
 async function saveRow(b) {
   try {
     const r = await api({ action: 'buchSave', id: b.id, art: b.art, betrag: String(b.betrag), datum: b.datum, partner: b.partner || '',
-      kategorie: b.kategorie, beschreibung: b.beschreibung || '', zahlungsart: b.zahlungsart || '', notiz: b.notiz || '', rc: b.rc ? '1' : '' });
+      kategorie: b.kategorie, beschreibung: b.beschreibung || '', zahlungsart: b.zahlungsart || '', notiz: b.notiz || '', rc: b.rc ? '1' : '', bereich: b.bereich || '' });
     if (!r.ok) throw new Error(r.error);
     toast('Übernommen ✓', 'ok'); load(true);
   } catch (err) { toast('Fehler: ' + err.message, 'bad'); }
@@ -313,6 +344,7 @@ async function handleFile(file) {
     if (!$('#fPartner').value && v.partner) $('#fPartner').value = v.partner;
     if (v.kategorie && document.querySelector('input[name=art]:checked').value === 'Ausgabe') fillKat('Ausgabe', v.kategorie);
     if (v.rc) $('#fRc').checked = true;
+    if (v.bereich && v.bereich !== 'allgemein' && bereich === 'alle') $('#fBereich').value = v.bereich;
     if (st) st.innerHTML = (v.betrag ? '✅ Gelesen – bitte kurz prüfen und speichern. ' : '✅ Beleg gespeichert – Betrag bitte eintragen. ') +
       `<a href="${r.url}" target="_blank" rel="noopener">ansehen</a>`;
     return r;
@@ -334,9 +366,9 @@ $('#exportBtn').addEventListener('click', async () => {
 });
 $('#csvBtn').addEventListener('click', () => {
   const rows = (data && data.rows) || [];
-  const head = ['Datum', 'Art', 'Betrag', 'Kategorie', 'Partner', 'Beschreibung', 'Bezahlt mit', 'Beleg', 'Quelle', 'Notiz'];
+  const head = ['Datum', 'Art', 'Bereich', 'Betrag', 'Kategorie', 'Partner', 'Beschreibung', 'Bezahlt mit', 'Beleg', 'Quelle', 'Notiz'];
   const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const lines = [head.join(';')].concat(rows.slice().reverse().map(b => [dDe(b.datum), b.art, (b.art === 'Ausgabe' ? -b.betrag : b.betrag).toFixed(2).replace('.', ','),
+  const lines = [head.join(';')].concat(rows.slice().reverse().map(b => [dDe(b.datum), b.art, berName(b.bereich).replace(/^\S+\s/, ''), (b.art === 'Ausgabe' ? -b.betrag : b.betrag).toFixed(2).replace('.', ','),
     b.kategorie, b.partner, b.beschreibung, b.zahlungsart, b.belegLink, b.quelle, b.notiz].map(q).join(';')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Buchungen_' + year + '.csv'; a.click();

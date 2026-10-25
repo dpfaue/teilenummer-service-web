@@ -13,14 +13,25 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/favicon-64.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
+<style>
+  #berSel{max-width:150px}
+  body.embed .top .brand{display:none}
+  body.embed .top{justify-content:flex-end}
+  body.embed #berSel{display:none}
+  body.embed .top{padding-top:6px;padding-bottom:6px}
+  .bertab{font-size:13px}
+  .berlabel{margin:-4px 0 12px;font-size:13px;color:var(--dim,#9aa3b2)}
+  .bertab td:first-child{white-space:nowrap}
+  .bi{opacity:.9;margin-right:3px}
+</style>
 </head>
 <body>
 
 <section id="gate" class="gate" hidden>
   <img src="icons/icon-192.png" alt="" class="gate-logo">
   <h1>Buchhaltung</h1>
-  <p class="dim">Einnahmen &amp; Ausgaben von Teilenummer.Service. Anmeldung mit demselben Admin-Schlüssel wie die Verwaltungs-App.</p>
+  <p class="dim">Einnahmen &amp; Ausgaben aller Bereiche (Teilenummer, Heizung, Handwerker-Mappe). Anmeldung mit demselben Admin-Schlüssel wie die Verwaltungs-App.</p>
   <form id="gateForm">
     <input type="password" id="keyInput" placeholder="Admin-Schlüssel" autocomplete="current-password" required>
     <button type="submit" class="btn">Anmelden</button>
@@ -32,6 +43,7 @@
   <header class="top">
     <div class="brand"><img src="icons/favicon-64.png" alt=""><span>Buchhaltung</span></div>
     <div class="top-right">
+      <select id="berSel" aria-label="Bereich"></select>
       <select id="yearSel" aria-label="Jahr"></select>
       <button id="refreshBtn" class="icon-btn" title="Aktualisieren" aria-label="Aktualisieren">↻</button>
     </div>
@@ -45,6 +57,7 @@
         <div class="kpi"><span>Ausgaben</span><b id="kAus">–</b></div>
         <div class="kpi big"><span>Gewinn</span><b id="kGew">–</b></div>
       </div>
+      <div class="berlabel" id="berLabel"></div>
 
       <div id="vorBox" class="vorbox" hidden>
         <h2 id="vorschlaege">🧾 <span id="vorTitle"></span></h2>
@@ -64,8 +77,10 @@
       <div class="hint">
         <b>Automatisch:</b> Verkäufe über die Website (mit PayPal-Gebühr und Erstattungen) werden selbst gebucht.
         Rechnungen per E-Mail einfach an <b>teilenummer.service@gmail.com</b> weiterleiten – sie erscheinen hier als Vorschlag.
+        Oben rechts wählst du den Bereich; das Finanzamt bekommt am Ende alles zusammen.
       </div>
 
+      <div id="berBox"></div>
       <h3 class="sec">Zuletzt</h3>
       <div id="recentList"></div>
       <div id="syncInfo" class="dim small center"></div>
@@ -86,9 +101,11 @@
     <!-- Auswertung -->
     <section id="v-report" class="view" hidden>
       <h2>Anlage EÜR <span id="rYear"></span></h2>
-      <p class="dim small">Diese Werte trägst du in die Anlage EÜR (ELSTER) ein. Als Kleinunternehmer alles brutto.</p>
+      <p class="dim small">Diese Werte trägst du in die Anlage EÜR (ELSTER) ein – immer <b>alle Bereiche zusammen</b> (ein Gewerbe). Als Kleinunternehmer alles brutto.</p>
       <div id="euerTable"></div>
       <div id="rWarn"></div>
+      <h3 class="sec">Nach Bereich (nur zur Übersicht)</h3>
+      <div id="berTable"></div>
       <h3 class="sec">Nach Kategorie</h3>
       <div id="katTable"></div>
       <div class="actions col">
@@ -128,7 +145,10 @@
         <label>Datum<input type="date" id="fDatum" required></label>
       </div>
       <label>Bei wem / von wem<input id="fPartner" placeholder="z. B. Google, Amazon, Kunde"></label>
-      <label>Kategorie<select id="fKat"></select></label>
+      <div class="row2">
+        <label>Kategorie<select id="fKat"></select></label>
+        <label>Bereich<select id="fBereich"></select></label>
+      </div>
       <label>Wofür<input id="fBeschr" placeholder="z. B. Druckerpapier, Google Ads Oktober"></label>
       <div class="row2">
         <label>Bezahlt mit<select id="fZahl">
@@ -146,6 +166,6 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
