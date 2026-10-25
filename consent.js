@@ -55,11 +55,11 @@
   };
 
   var css = '#tnsConsent{position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;max-width:560px;margin:0 auto;' +
-    'background:#1b1f2b;color:#eef0f4;border:1px solid #2a2f3d;border-radius:14px;padding:16px 18px;' +
+    'background:#1b1f2b;color:#eef0f4;border:1px solid #2a2f3d;border-radius:14px;padding:12px 14px;' +
     'box-shadow:0 10px 30px rgba(0,0,0,.45);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' +
-    '#tnsConsent p{margin:0 0 12px;color:#c7cbd6;}#tnsConsent strong{color:#eef0f4;}#tnsConsent a{color:#ff6a1a;}' +
+    '#tnsConsent p{margin:0 0 10px;color:#c7cbd6;}#tnsConsent strong{color:#eef0f4;}#tnsConsent a{color:#ff6a1a;}' +
     '#tnsConsent .b{display:flex;gap:10px;flex-wrap:wrap;}' +
-    '#tnsConsent button{flex:1 1 140px;padding:11px 14px;border-radius:999px;font-weight:700;font-size:14px;cursor:pointer;' +
+    '#tnsConsent button{flex:1 1 140px;padding:9px 12px;border-radius:999px;font-weight:700;font-size:14px;cursor:pointer;' +
     'border:1px solid #ff6a1a;background:transparent;color:#eef0f4;}' +
     '#tnsConsent button:hover{background:rgba(255,106,26,.15);}';
 
@@ -75,10 +75,7 @@
     d.id = 'tnsConsent';
     d.setAttribute('role', 'dialog');
     d.setAttribute('aria-label', 'Cookie-Einstellungen');
-    d.innerHTML = '<p><strong>Darf ich messen, ob meine Google-Werbung funktioniert?</strong><br>' +
-      'Wenn du zustimmst, setzt Google ein Cookie, damit ich sehe, ob eine Anfrage über eine Anzeige kam (Google Ads Conversion-Tracking). ' +
-      'Keine personalisierte Werbung. Ohne Zustimmung funktioniert alles genauso. ' +
-      '<a href="datenschutz.html#google-ads">Mehr dazu</a></p>' +
+    d.innerHTML = '<p>Darf ich mit einem Google-Cookie messen, ob meine Werbung wirkt? Keine personalisierte Werbung. <a href="datenschutz.html#google-ads">Mehr</a></p>' +
       '<div class="b"><button type="button" data-v="nein">Ablehnen</button><button type="button" data-v="ja">Erlauben</button></div>';
     d.addEventListener('click', function (e) {
       var v = e.target && e.target.getAttribute && e.target.getAttribute('data-v');
