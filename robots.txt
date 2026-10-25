@@ -3,5 +3,6 @@ Allow: /
 Disallow: /admin.html
 Disallow: /admin-alt.html
 Disallow: /app/
+Disallow: /buchhaltung/
 
 Sitemap: https://teilenummer-service.de/sitemap.xml
