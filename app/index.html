@@ -3,25 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Teilenummer – Verwaltung</title>
+<title>Zentrale – Verwaltung</title>
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#0f1115">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Teilenummer">
+<meta name="apple-mobile-web-app-title" content="Zentrale">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/favicon-64.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
+<style>
+  .tabs{grid-template-columns:repeat(5,1fr)!important}
+  #bereichSel{background:var(--card,#1b1f2b);color:inherit;border:1px solid var(--border,#2a2f3d);border-radius:10px;padding:6px 8px;font-size:14px;max-width:46vw}
+  #view-buch{padding:0!important;margin:0 -16px}
+  @media (max-width:520px){#syncInfo{display:none}}
+  #buchFrame{display:block;width:100%;border:0;height:calc(100dvh - 128px - env(safe-area-inset-bottom));background:transparent}
+</style>
 </head>
 <body>
 
 <!-- Anmeldung -->
 <section id="gate" class="gate" hidden>
   <img src="icons/icon-192.png" alt="" class="gate-logo">
-  <h1>Teilenummer<span>.Service</span></h1>
-  <p class="dim">Verwaltung – bitte mit deinem Admin-Schlüssel anmelden. Der Schlüssel bleibt nur auf diesem Gerät gespeichert.</p>
+  <h1>Zentrale</h1>
+  <p class="dim">Teilenummer · Heizung · Handwerker-Mappe – bitte mit deinem Admin-Schlüssel anmelden. Der Schlüssel bleibt nur auf diesem Gerät gespeichert.</p>
   <form id="gateForm">
     <input type="password" id="keyInput" placeholder="Admin-Schlüssel" autocomplete="current-password" required>
     <button type="submit" class="btn">Anmelden</button>
@@ -32,8 +39,9 @@
 <!-- App -->
 <div id="app" hidden>
   <header class="top">
-    <div class="brand"><img src="icons/favicon-64.png" alt=""><span>Teilenummer<b>.Service</b></span></div>
+    <div class="brand"><img src="icons/favicon-64.png" alt=""><span>Zentrale</span></div>
     <div class="top-right">
+      <select id="bereichSel" aria-label="Bereich wählen"></select>
       <span id="syncInfo" class="dim small"></span>
       <button id="refreshBtn" class="icon-btn" title="Aktualisieren" aria-label="Aktualisieren">↻</button>
     </div>
@@ -43,6 +51,7 @@
     <button data-view="anfragen" class="active"><span class="ti">📋</span><span>Anfragen</span><em id="badgeOpen" hidden></em></button>
     <button data-view="postfach"><span class="ti">✉️</span><span>Postfach</span><em id="badgeMail" hidden></em></button>
     <button data-view="umsatz"><span class="ti">📈</span><span>Umsatz</span></button>
+    <button data-view="buch"><span class="ti">🧾</span><span>Buchhaltung</span></button>
     <button data-view="mehr"><span class="ti">⚙️</span><span>Mehr</span></button>
   </nav>
 
@@ -52,7 +61,7 @@
       <div id="summary" class="summary"></div>
       <div id="replyBanner" class="banner" hidden></div>
       <div class="chips" id="statusChips"></div>
-      <input type="search" id="search" class="search" placeholder="Suchen: Name, FIN, Modell, E-Mail …">
+      <input type="search" id="search" class="search" placeholder="Suchen: Name, FIN/Fehlercode, Modell/Gerät, E-Mail …">
       <div id="list"></div>
     </section>
 
@@ -73,6 +82,11 @@
     <section class="view" id="view-umsatz" hidden>
       <h2>Umsatz</h2>
       <div id="revenue"></div>
+    </section>
+
+    <!-- Buchhaltung (eingebettet, gleicher Schlüssel) -->
+    <section class="view" id="view-buch" hidden>
+      <iframe id="buchFrame" title="Buchhaltung"></iframe>
     </section>
 
     <!-- Mehr -->
@@ -103,7 +117,9 @@
       </div>
       <div class="card">
         <h3>Links</h3>
-        <p class="small"><a href="https://teilenummer-service.de/" target="_blank" rel="noopener">Website ↗</a> ·
+        <p class="small">Websites: <a href="https://teilenummer-service.de/" target="_blank" rel="noopener">Teilenummer ↗</a> ·
+        <a href="https://heizung-stoerung.de/" target="_blank" rel="noopener">Heizung ↗</a> ·
+        <a href="https://handwerker-mappe.de/" target="_blank" rel="noopener">Handwerker-Mappe ↗</a><br>
         <a href="https://www.paypal.com/activities" target="_blank" rel="noopener">PayPal-Aktivitäten ↗</a> ·
         <a href="https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com" target="_blank" rel="noopener">Gmail ↗</a></p>
       </div>
@@ -118,6 +134,6 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

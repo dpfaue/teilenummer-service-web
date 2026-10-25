@@ -1,7 +1,7 @@
 {
-  "name": "Teilenummer.Service – Verwaltung",
-  "short_name": "Teilenummer",
-  "description": "Anfragen, Postfach und Umsatz von Teilenummer.Service",
+  "name": "Zentrale – Teilenummer, Heizung, Handwerker-Mappe",
+  "short_name": "Zentrale",
+  "description": "Anfragen, Postfach, Umsatz und Buchhaltung aller Bereiche",
   "lang": "de",
   "start_url": "./?source=app",
   "scope": "./",

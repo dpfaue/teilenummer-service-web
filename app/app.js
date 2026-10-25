@@ -1,12 +1,35 @@
-/* Teilenummer.Service – Verwaltungs-App (PWA)
+/* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '1.3.1 (22.10.2026)';
+const APP_VERSION = '2.0 (25.10.2026, Zentrale)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
 const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
+// Mehrmarken (Entwurf): Anfragen von Heizung-Störung.de kommen mit service 'heizung' aus dem Backend.
+const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe' };
+const svc = r => (r && r.service) || 'teilenummer';
+const HEIZ = r => svc(r) === 'heizung';
+const VORL = r => svc(r) === 'vorlagen';
+const svcIcon = r => svc(r) === 'teilenummer' ? '' : BEREICHE[svc(r)].split(' ')[0] + ' ';
+const FELD = r => HEIZ(r) ? { modell: 'Gerät', fin: 'Fehlercode', motor: 'Anlagendruck', teile: '① Ursache / ggf. Ersatzteil' }
+  : VORL(r) ? { modell: 'Produkt', fin: 'Firma', motor: '–', teile: '① (nicht nötig – automatisch ausgeliefert)' }
+  : { modell: 'Modell', fin: 'FIN', motor: 'Motor', teile: '① Gefundene Teile' };
+let bereich = (function () { try { const v = JSON.parse(localStorage.getItem('z_bereich')); return BEREICHE[v] ? v : 'alle'; } catch (e) { return 'alle'; } })();
+const vrows = () => bereich === 'alle' ? rows : rows.filter(r => svc(r) === bereich);
+const HEIZ_TPL = [
+  { t: '🔥 Ursache + Schritte', x: 'Der Code {fin} bedeutet bei deinem {modell}: \n\nWahrscheinlichste Ursache in deinem Fall: \n\nDas kannst du selbst gefahrlos prüfen:\n1) \n2) \n3) \n\nWenn das nicht hilft: Bitte einen Fachbetrieb rufen und ihm den Code {fin} nennen – dann weiß er gleich, wo er suchen muss.' },
+  { t: '🔥 Druck auffüllen', x: 'Dein Anlagendruck ({motor}) ist zu niedrig. So füllst du Wasser nach:\n1) Heizung ausschalten und abkühlen lassen.\n2) Füllschlauch an Wasserhahn und Füll-/Entleerhahn (KFE) anschließen, Schlauch vorher mit Wasser füllen (keine Luft).\n3) Hähne langsam öffnen, bis das Manometer kalt ca. 1,5 bar zeigt (Herstellerangabe beachten).\n4) Hähne schließen, Schlauch abnehmen, Heizung einschalten und entstören.\n\nVerliert die Anlage innerhalb weniger Tage wieder Druck, liegt ein Leck oder ein defektes Ausdehnungsgefäß vor – dann bitte vom Fachbetrieb prüfen lassen.' },
+  { t: '🔥 Fachbetrieb nötig', x: 'Bei diesem Fehler geht es um Teile, an denen laut Gesetz nur ein eingetragener Fachbetrieb arbeiten darf (Gasweg/Abgas). Bitte selbst nichts öffnen.\n\nWas du dem Fachbetrieb sagen kannst, damit es schnell geht:\n• Gerät: {modell}\n• Fehlercode: {fin}\n• Vermutete Ursache: \n\nSo vermeidest du unnötige Suchstunden auf der Rechnung.' },
+  { t: '🔥 Rückfrage', x: 'Damit ich die Ursache eingrenzen kann, brauche ich noch kurz:\n\n• \n\nEin Foto vom Display und vom Typenschild hilft auch. Sobald ich die Antwort habe, melde ich mich.' },
+  { t: '🔥 Nicht lösbar → Erstattung', x: 'Leider kann ich die Ursache für deinen {modell} aus der Ferne nicht sicher eingrenzen. Grund: \n\nDeshalb erstatte ich dir den vollen Betrag über PayPal – das Geld ist in den nächsten Tagen wieder auf deinem Konto.' }
+];
+const VORL_TPL = [
+  { t: '📄 Mappe erneut senden', x: 'Hier ist deine Handwerker-Mappe noch einmal – die ZIP-Datei mit allen Vorlagen hängt an. Bitte auch im Spam-Ordner schauen, falls künftig etwas fehlt.' },
+  { t: '📄 Logo-Version', x: 'Gern baue ich dein Logo und deine Firmendaten fest in alle Vorlagen ein (Aufpreis 20 €). Schick mir dafür bitte:\n• Logo (PNG oder JPG)\n• Firmenname, Anschrift, Telefon, E-Mail\n\nDu bekommst die fertige Mappe innerhalb von 2 Werktagen.' }
+];
+const tplsFor = r => HEIZ(r) ? HEIZ_TPL : VORL(r) ? VORL_TPL : tpls;
 const DEFAULT_TPL = [
   { t: 'Teilenummer gefunden', x: 'Für deine FIN {fin} habe ich folgende Teile ermittelt:\n\n{teile}\n\nSuchbegriffe für Shops: \nBezugsquelle: Originalteil beim Vertragshändler oder meist günstiger bei Teilehändlern und Online-Shops – einfach die Teilenummer ins Suchfeld eingeben.{extras}\n\nAchte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
   { t: 'Mehrere Varianten', x: 'Für deinen {modell} gibt es je nach Ausstattung mehrere Varianten:\n\n1) \n2) \n\nWelche bei dir verbaut ist, erkennst du am einfachsten an: ' },
@@ -145,10 +168,27 @@ function go(view) {
   if (view === 'postfach') { renderInbox(); loadInbox(); }
   if (view === 'umsatz') renderRevenue();
   if (view === 'mehr') { pushState(); renderTplEditor(); }
+  if (view === 'buch') openBuch();
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => { if (b.dataset.view === 'anfragen') detailId = null; go(b.dataset.view); render(); }));
-$('#refreshBtn').addEventListener('click', () => refresh(false));
+$('#refreshBtn').addEventListener('click', () => { refresh(false); if (currentView === 'buch') { const f = $('#buchFrame'); try { f.contentWindow.location.reload(); } catch (e) {} } });
+
+/* ---------- Bereich-Umschalter (oben) + eingebettete Buchhaltung ---------- */
+function fillBereichSel() { $('#bereichSel').innerHTML = Object.keys(BEREICHE).map(k => `<option value="${k}" ${k === bereich ? 'selected' : ''}>${BEREICHE[k]}</option>`).join(''); }
+function setBereich(k, fromFrame) {
+  if (!BEREICHE[k]) k = k === 'allgemein' ? 'alle' : 'alle';
+  bereich = k; store.set('z_bereich', k); fillBereichSel(); render();
+  if (!fromFrame) { const f = $('#buchFrame'); if (f && f.src) try { f.contentWindow.postMessage({ bereich: k }, location.origin); } catch (e) {} }
+}
+$('#bereichSel').addEventListener('change', e => setBereich(e.target.value));
+function openBuch() {
+  const f = $('#buchFrame');
+  if (!f.src) f.src = '/buchhaltung/?embed=1&bereich=' + encodeURIComponent(bereich);
+  else try { f.contentWindow.postMessage({ bereich }, location.origin); } catch (e) {}
+}
+window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.bereich && e.data.bereich !== bereich) setBereich(e.data.bereich, true); });
+fillBereichSel();
 $('#backBtn').addEventListener('click', () => { detailId = null; go('anfragen'); render(); });
 $('#search').addEventListener('input', renderList);
 
@@ -161,10 +201,10 @@ function render() { updateBadges(); renderSummary(); renderChips(); renderList()
 
 /* Übersicht oben: offene Anfragen, nächste Frist, Umsatz heute/Monat */
 function renderSummary() {
-  const open = rows.filter(r => r.status === 'offen' || r.status === 'in Bearbeitung');
+  const open = vrows().filter(r => r.status === 'offen' || r.status === 'in Bearbeitung');
   const next = open.filter(r => r.frist).sort((a, b) => new Date(a.frist) - new Date(b.frist))[0];
   const d = next ? dueInfo(next) : null;
-  const paid = rows.filter(isPaid);
+  const paid = vrows().filter(isPaid);
   const now = new Date(), sum = a => a.reduce((s, r) => s + (parseFloat(r.preis) || 0), 0);
   const today = paid.filter(r => new Date(r.eingang).toDateString() === now.toDateString());
   const month = paid.filter(r => { const x = new Date(r.eingang); return x.getMonth() === now.getMonth() && x.getFullYear() === now.getFullYear(); });
@@ -263,7 +303,7 @@ function fillTpl(text, r) {
   const teile = partsForMail(curParts) || '• Bezeichnung: Teilenummer';
   const extras = (r.paket === 'express' || r.paket === 'premium')
     ? '\n\nPassend dazu (Dichtungen, Schrauben, Zubehör):\n• \n\nDirekte Links:\n• ' : '';
-  return text.replace(/\{teile\}/g, teile).replace(/\{extras\}/g, extras).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || 'Fahrzeug').replace(/\{baujahr\}/g, r.baujahr || '')
+  return text.replace(/\{teile\}/g, teile).replace(/\{extras\}/g, extras).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || (HEIZ(r) ? 'Gerät' : 'Fahrzeug')).replace(/\{baujahr\}/g, r.baujahr || '')
     .replace(/\{fin\}/g, r.fin || '').replace(/\{motor\}/g, r.motor || '');
 }
 
@@ -279,7 +319,7 @@ function updateBadges() {
 function setBadge(n) { try { if ('setAppBadge' in navigator) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch (e) {} }
 
 function renderChips() {
-  const count = s => s === 'alle' ? rows.length : rows.filter(r => (r.status || 'offen') === s).length;
+  const count = s => s === 'alle' ? vrows().length : vrows().filter(r => (r.status || 'offen') === s).length;
   const labels = { offen: 'Offen', 'in Bearbeitung': 'In Arbeit', beantwortet: 'Beantwortet', erstattet: 'Erstattet', 'Zahlung prüfen': '⚠️ Zahlung prüfen', alle: 'Alle' };
   const chips = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet', 'alle'];
   if (count('Zahlung prüfen')) chips.unshift('Zahlung prüfen');
@@ -290,16 +330,16 @@ function renderChips() {
 
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
-  let list = filter === 'alle' ? rows.slice() : rows.filter(r => (r.status || 'offen') === filter);
+  let list = filter === 'alle' ? vrows().slice() : vrows().filter(r => (r.status || 'offen') === filter);
   if (q) list = list.filter(r => [r.name, r.email, r.fin, r.modell, r.problem, r.orderId].join(' ').toLowerCase().includes(q));
   const offen = s => s === 'offen' || s === 'in Bearbeitung';
   list.sort((a, b) => (offen(a.status) && offen(b.status)) ? new Date(a.frist || 8e15) - new Date(b.frist || 8e15) : new Date(b.eingang) - new Date(a.eingang));
-  if (!list.length) { $('#list').innerHTML = `<div class="empty">${rows.length ? 'Keine Anfragen in dieser Ansicht.' : 'Noch keine Anfragen.'}</div>`; return; }
+  if (!list.length) { $('#list').innerHTML = `<div class="empty">${vrows().length ? 'Keine Anfragen in dieser Ansicht.' : 'Noch keine Anfragen.'}</div>`; return; }
   $('#list').innerHTML = list.map(r => {
     const d = dueInfo(r);
     return `<button class="item" data-id="${esc(r.orderId)}">
       <div class="row1"><div><div class="name">${r.kundenAntwortUngelesen ? '<span class="dot"></span>' : ''}${esc(r.name || '–')}</div>
-      <div class="sub">${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}</div></div>
+      <div class="sub">${svcIcon(r)}${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}${HEIZ(r) && r.fin ? ' · ' + esc(r.fin) : ''}</div></div>
       <span class="pill ${stClass(r.status)}">${esc(r.status || 'offen')}</span></div>
       <div class="meta"><span class="pkg">${esc(PAKETE[r.paket] || r.paket || '')} · ${euro(r.preis)}</span>
       ${d ? `<span class="due ${d.cls}">⏱ ${esc(d.txt)}</span>` : `<span class="dim small">${esc(ago(r.eingang))}</span>`}
@@ -322,9 +362,9 @@ function renderDetail() {
     ${d ? `<div class="due ${d.cls}" style="margin-top:8px">⏱ ${esc(d.txt)} (bis ${esc(fmt(r.frist))})</div>` : ''}
     ${(r.status || 'offen') === 'offen' ? `<div class="actions"><button class="btn small" data-st="in Bearbeitung">▶ Übernehmen (in Bearbeitung)</button></div>` : ''}
     <div class="tools">
-      ${r.fin ? `<button data-pl="${esc(r.fin)}">🔎 Partslink24 (FIN wird kopiert)</button>` : ''}
-      ${r.fin ? `<a href="https://www.vindecoderz.com/EN/check-lookup/${encodeURIComponent(r.fin)}" target="_blank" rel="noopener">🧾 FIN entschlüsseln</a>` : ''}
-      <a href="https://www.google.com/search?q=${encodeURIComponent([r.modell, r.baujahr, r.motor, String(r.problem || '').slice(0, 80)].filter(Boolean).join(' '))}" target="_blank" rel="noopener">🌐 Google-Suche</a>
+      ${r.fin && svc(r) === 'teilenummer' ? `<button data-pl="${esc(r.fin)}">🔎 Partslink24 (FIN wird kopiert)</button>` : ''}
+      ${r.fin && svc(r) === 'teilenummer' ? `<a href="https://www.vindecoderz.com/EN/check-lookup/${encodeURIComponent(r.fin)}" target="_blank" rel="noopener">🧾 FIN entschlüsseln</a>` : ''}
+      <a href="https://www.google.com/search?q=${encodeURIComponent((HEIZ(r) ? [r.modell, 'Fehler', r.fin] : [r.modell, r.baujahr, r.motor, String(r.problem || '').slice(0, 80)]).filter(Boolean).join(' '))}" target="_blank" rel="noopener">🌐 Google-Suche</a>
       ${r.telefon ? `<a href="tel:${esc(r.telefon)}">📞 Anrufen</a>` : ''}
     </div>
     <div class="kv">
@@ -332,21 +372,22 @@ function renderDetail() {
       <div>Eingang<b>${esc(fmt(r.eingang))}</b></div>
       <div class="wide">E-Mail<b><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></b></div>
       <div>Telefon<b>${r.telefon ? `<a href="tel:${esc(r.telefon)}">${esc(r.telefon)}</a>` : '–'}</b></div>
-      <div class="wide">FIN<b>${esc(r.fin || '–')}${r.fin ? `<button class="copy" data-copy="${esc(r.fin)}">kopieren</button>` : ''}</b></div>
-      <div>Motor<b>${esc(r.motor || '–')}</b></div>
+      ${svc(r) !== 'teilenummer' ? `<div class="wide">Bereich<b>${esc(BEREICHE[svc(r)])}</b></div>` : ''}
+      <div class="wide">${FELD(r).fin}<b>${esc(r.fin || '–')}${r.fin ? `<button class="copy" data-copy="${esc(r.fin)}">kopieren</button>` : ''}</b></div>
+      <div>${FELD(r).motor}<b>${esc(r.motor || '–')}</b></div>
       <div>Quelle<b>${esc(r.quelle || '–')}</b></div>
       <div class="wide">Zahlung<b style="${String(r.zahlungCheck || '').startsWith('ABWEICHUNG') ? 'color:var(--bad)' : ''}">${esc(r.zahlungCheck || '–')}</b></div>
       <div class="wide">PayPal-Order-ID<b>${esc(r.orderId || '–')}</b></div>
       ${r.rechnungsnummer ? `<div>Rechnungsnummer<b>${esc(r.rechnungsnummer)}</b></div>` : ''}
     </div>
-    <div class="section-title">Problem / gesuchtes Teil</div>
+    <div class="section-title">${HEIZ(r) ? 'Beschreibung der Störung' : VORL(r) ? 'Bestellung / Widerrufsverzicht' : 'Problem / gesuchtes Teil'}</div>
     <div class="box">${esc(r.problem || '–')}</div>
     <div class="section-title">Fotos</div>
     <div class="photos">${(r.fotos || []).filter(Boolean).map((u, i) => /^https?:/.test(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener">📷 Foto ${i + 1}</a>` : `<span class="dim small">${esc(u)}</span>`).join('') || '<span class="dim small">keine</span>'}</div>
     ${r.antwort ? `<div class="section-title">Letzte Antwort (${esc(fmt(r.antwortDatum))})</div><div class="box">${esc(r.antwort)}</div>` : ''}
     ${r.threadId ? `<a class="mail-link${r.kundenAntwortUngelesen ? ' unread' : ''}" href="${gmailThread(r.threadId)}" target="_blank" rel="noopener">${r.kundenAntwortUngelesen ? '🔵 Neue Antwort vom Kunden – in Gmail öffnen ↗' : '📧 Mail-Verlauf in Gmail öffnen ↗'}</a>` : ''}
 
-    <div class="section-title">① Gefundene Teile</div>
+    <div class="section-title">${FELD(r).teile}</div>
     <div class="card">
       <datalist id="dlTeile">${teileVorschlaege()}</datalist>
       <div class="parts" id="partsBox"></div>
@@ -360,7 +401,7 @@ function renderDetail() {
 
     <div class="section-title">② Antworten</div>
     <div class="card">
-      <div class="tpls">${tpls.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
+      <div class="tpls">${tplsFor(r).map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
       <textarea id="replyText" placeholder="Nur den Inhalt eintippen – „Hallo …“, Bezug zur Anfrage und Grußformel ergänzt das System automatisch (siehe Vorschau).">${esc(getDraft(r.orderId).reply || '')}</textarea>
       <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
       <label class="check"><input type="checkbox" id="attachPdf" ${attachDefault(r) ? 'checked' : ''}> 📎 Rechnung als PDF anhängen</label>
@@ -399,7 +440,7 @@ function renderDetail() {
   loadAttachments(r);
   $('#replyText').addEventListener('input', e => { setDraft(r.orderId, { reply: e.target.value }); $('#draftNote').textContent = e.target.value.trim() ? '💾 Entwurf gespeichert' : ''; });
   document.querySelectorAll('#detail [data-tpl]').forEach(b => b.addEventListener('click', () => {
-    const t = tpls[+b.dataset.tpl]; if (!t) return;
+    const t = tplsFor(r)[+b.dataset.tpl]; if (!t) return;
     insertIntoReply($('#replyText'), fillTpl(t.x, r));
   }));
   document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', () => {
@@ -550,12 +591,12 @@ function renderInbox() {
 
 /* ---------- Umsatz ---------- */
 function renderRevenue() {
-  const paid = rows.filter(isPaid);
+  const paid = vrows().filter(isPaid);
   const sum = a => a.reduce((s, r) => s + (parseFloat(r.preis) || 0), 0);
   const now = new Date();
   const thisMonth = paid.filter(r => { const d = new Date(r.eingang); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
   const last30 = paid.filter(r => Date.now() - new Date(r.eingang) < 30 * 864e5);
-  const refunded = rows.filter(r => r.status === 'erstattet');
+  const refunded = vrows().filter(r => r.status === 'erstattet');
   const group = key => { const m = {}; paid.forEach(r => { const k = (key === 'paket' ? (PAKETE[r.paket] || r.paket) : (r.quelle || 'direkt')) || '–'; m[k] = m[k] || { n: 0, s: 0 }; m[k].n++; m[k].s += parseFloat(r.preis) || 0; }); return m; };
   const bars = m => { const max = Math.max(1, ...Object.values(m).map(x => x.s)); return Object.entries(m).sort((a, b) => b[1].s - a[1].s).map(([k, v]) =>
     `<div class="bar"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(v.s / max * 100).toFixed(1)}%"></div></div><span class="val">${v.n}× · ${euro(v.s)}</span></div>`).join('') || '<div class="dim small">noch keine Daten</div>'; };
@@ -569,7 +610,7 @@ function renderRevenue() {
     <div class="card"><h3>Nach Paket</h3><div class="bars">${bars(group('paket'))}</div></div>
     <div class="card"><h3>Nach Herkunft (Werbung)</h3><div class="bars">${bars(group('quelle'))}</div>
       <p class="dim small">„google-ads“ = kam über eine Google-Anzeige, „direkt“ = ohne erkennbare Quelle.</p></div>
-    <p class="dim small">Umsatz ohne Gebühren (PayPal) und als Kleinunternehmer ohne Umsatzsteuer.</p>`;
+    <p class="dim small">${esc(BEREICHE[bereich])} · Umsatz ohne Gebühren (PayPal) und als Kleinunternehmer ohne Umsatzsteuer. Gewinn und Ausgaben siehst du unter 🧾 Buchhaltung.</p>`;
 }
 
 /* ---------- Push-Benachrichtigungen (Firebase Cloud Messaging) ---------- */
