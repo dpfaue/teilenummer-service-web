@@ -1,7 +1,7 @@
 /* Buchhaltung für alle Bereiche (Teilenummer, Heizung, Handwerker-Mappe) – PWA, auch eingebettet in die Zentrale
    Gleiche Apps-Script-Schnittstelle wie die Verwaltungs-App (JSONP + Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.0 (25.10.2026, Bereiche)';
+const APP_VERSION = '2.0.1 (25.10.2026, Bereiche)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const KAT_FALLBACK = {
   Einnahme: ['Verkäufe (Teilenummer)', 'Verkäufe (Heizung-Störung)', 'Verkäufe (Vorlagen)', 'Sonstige Einnahmen'],
@@ -64,7 +64,11 @@ function api(params, timeoutMs) {
     const done = () => { delete window[cb]; s.remove(); };
     window[cb] = d => { done(); resolve(d); };
     s.src = API + '?' + new URLSearchParams({ ...params, admin: '1', key: adminKey, callback: cb });
-    s.onerror = () => { done(); reject(new Error('Keine Verbindung')); };
+    s.onerror = () => { // Fallback: manche Browser (z. B. Desktop-Chrome mit Google-Anmeldung) blockieren das Skript – dann per fetch lesen
+      done();
+      fetch(s.src).then(r => r.text()).then(t => { const m = t.match(/^[\w$]+\(([\s\S]*)\);?\s*$/); resolve(JSON.parse(m ? m[1] : t)); })
+        .catch(() => reject(new Error('Keine Verbindung')));
+    };
     document.body.appendChild(s);
     setTimeout(() => { if (window[cb]) { done(); reject(new Error('Zeitüberschreitung')); } }, timeoutMs || 30000);
   });
