@@ -1,7 +1,7 @@
 /* Service Worker – hält die App-Oberfläche offline verfügbar und zeigt Push-Nachrichten an.
    Daten kommen immer frisch vom Server. */
-const CACHE = 'tns-app-v6';
-const SHELL = ['./', 'index.html', 'style.css?v=6', 'app.js?v=6', 'manifest.webmanifest',
+const CACHE = 'tns-app-v7';
+const SHELL = ['./', 'index.html', 'style.css?v=6', 'app.js?v=7', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/favicon-64.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

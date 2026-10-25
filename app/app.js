@@ -1,7 +1,7 @@
 /* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.0 (25.10.2026, Zentrale)';
+const APP_VERSION = '2.0.1 (25.10.2026, Zentrale)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
@@ -92,7 +92,11 @@ function api(params, timeoutMs) {
     const done = () => { delete window[cb]; s.remove(); };
     window[cb] = data => { done(); resolve(data); };
     s.src = API + '?' + new URLSearchParams({ ...params, admin: '1', key: adminKey, callback: cb });
-    s.onerror = () => { done(); reject(new Error('Keine Verbindung')); };
+    s.onerror = () => { // Fallback: manche Browser (z. B. Desktop-Chrome mit Google-Anmeldung) blockieren das Skript – dann per fetch lesen
+      done();
+      fetch(s.src).then(r => r.text()).then(t => { const m = t.match(/^[\w$]+\(([\s\S]*)\);?\s*$/); resolve(JSON.parse(m ? m[1] : t)); })
+        .catch(() => reject(new Error('Keine Verbindung')));
+    };
     document.body.appendChild(s);
     setTimeout(() => { if (window[cb]) { done(); reject(new Error('Zeitüberschreitung')); } }, timeoutMs || 25000);
   });
