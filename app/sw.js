@@ -53,6 +53,15 @@ self.addEventListener('push', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const hash = (e.notification.data && e.notification.data.url) || '';
+  if (hash.charAt(0) === '/') {
+    // Ziel in einer anderen App derselben Domain (z. B. /buchhaltung/#vorschlaege)
+    const abs = new URL(hash, self.location.origin).href, base = abs.split('#')[0];
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) if (c.url.split('#')[0].split('?')[0] === base.split('?')[0] && 'navigate' in c) return c.navigate(abs).then(w => (w || c).focus());
+      return self.clients.openWindow(abs);
+    }));
+    return;
+  }
   const target = new URL('./' + (hash.charAt(0) === '#' ? hash : ''), self.registration.scope).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
     for (const c of list) {
