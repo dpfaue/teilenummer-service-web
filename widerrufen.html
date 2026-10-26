@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vertrag widerrufen – Teilenummer.Service</title><meta name="robots" content="noindex">
+<style>:root{--bg:#0f1115;--card:#1b1f2b;--line:#2a2f3d;--text:#eef0f4;--dim:#a4abbd;--acc:#ff6a1a;--btn:#ff6a1a;--btntext:#111}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
+.wrap{max-width:620px;margin:0 auto;padding:40px 16px 60px}a{color:var(--acc)}.back{color:var(--dim);font-size:14px;text-decoration:none}
+h1{font-size:26px;margin:18px 0 8px}p{color:var(--dim)}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:18px}
+label{display:block;font-weight:600;font-size:14px;margin:14px 0 4px}input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:var(--bg);color:var(--text)}
+.hint{font-size:12.5px;color:var(--dim);margin-top:4px}button{width:100%;margin-top:18px;padding:13px;border:0;border-radius:999px;background:var(--btn);color:var(--btntext);font-weight:700;font-size:16px;cursor:pointer}
+button.sec{background:transparent;color:var(--dim);border:1px solid var(--line);margin-top:10px}.sum{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px}
+.err{color:#e5484d;font-size:14px;margin-top:10px;display:none}.ok{display:none}.ok b{color:var(--text)}
+</style></head><body><div class="wrap">
+<a class="back" href="index.html">← zurück zu Teilenummer.Service</a>
+<h1>Vertrag widerrufen</h1>
+<p>Hier kannst du einen bei Teilenummer.Service online geschlossenen Vertrag widerrufen. Gründe musst du nicht angeben. Du bekommst sofort eine Eingangsbestätigung per E-Mail.</p>
+<div class="card" id="s1">
+  <label for="w_name">Dein Name *</label><input id="w_name" autocomplete="name">
+  <label for="w_vertrag">Welcher Vertrag? *</label><input id="w_vertrag" placeholder="z. B. Rechnungsnummer (TS-…) oder PayPal-Transaktions-ID">
+  <div class="hint">Alternativ: Kaufdatum und E-Mail-Adresse der Bestellung.</div>
+  <label for="w_email">E-Mail für die Eingangsbestätigung *</label><input id="w_email" type="email" autocomplete="email">
+  <div class="err" id="e1"></div>
+  <button id="weiter">Weiter</button>
+</div>
+<div class="card" id="s2" hidden>
+  <p style="margin-top:0">Bitte prüfen – mit „Widerruf bestätigen“ wird deine Erklärung übermittelt:</p>
+  <div class="sum" id="sum"></div>
+  <div class="err" id="e2"></div>
+  <button id="bestaetigen">Widerruf bestätigen</button>
+  <button class="sec" id="zurueck">Angaben ändern</button>
+</div>
+<div class="card ok" id="s3"><p style="margin-top:0"><b>Dein Widerruf ist eingegangen.</b></p><p id="okt"></p></div>
+<p style="font-size:13px;margin-top:22px">Du kannst den Widerruf auch formlos per E-Mail an <a href="mailto:kontakt@teilenummer-service.de">kontakt@teilenummer-service.de</a> erklären. <a href="widerruf.html">Widerrufsbelehrung</a></p>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+function d() { return { name: $('w_name').value.trim(), vertrag: $('w_vertrag').value.trim(), email: $('w_email').value.trim() }; }
+function text(x) { return 'Hiermit widerrufe ich den mit Teilenummer.Service geschlossenen Vertrag.\nAngabe zum Vertrag: ' + x.vertrag + '\nName: ' + x.name + '\nEingangsbestätigung an: ' + x.email; }
+$('weiter').onclick = () => {
+  const x = d(), e = $('e1'); e.style.display = 'none';
+  if (!x.name || !x.vertrag) { e.textContent = 'Bitte Name und Angabe zum Vertrag ausfüllen.'; e.style.display = 'block'; return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.email)) { e.textContent = 'Bitte eine gültige E-Mail-Adresse angeben.'; e.style.display = 'block'; return; }
+  $('sum').textContent = text(x); $('s1').hidden = true; $('s2').hidden = false;
+};
+$('zurueck').onclick = () => { $('s2').hidden = true; $('s1').hidden = false; };
+$('bestaetigen').onclick = async () => {
+  const x = d(), b = $('bestaetigen'); b.disabled = true; b.textContent = 'Wird übermittelt …';
+  const zeit = new Date();
+  try {
+    await fetch('https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ kind: 'widerruf', marke: 'teilenummer', name: x.name, vertrag: x.vertrag, email: x.email }) });
+    $('s2').hidden = true; $('s3').style.display = 'block';
+    $('okt').textContent = 'Eingegangen am ' + zeit.toLocaleDateString('de-DE') + ' um ' + zeit.toLocaleTimeString('de-DE') + ' Uhr. Eine Bestätigung mit Inhalt und Zeitpunkt geht an ' + x.email + ' (bitte auch im Spam-Ordner schauen).';
+  } catch (err) {
+    b.disabled = false; b.textContent = 'Widerruf bestätigen';
+    const e = $('e2'); e.innerHTML = 'Die Übermittlung hat nicht geklappt. Bitte erneut versuchen oder per E-Mail an <a href="mailto:kontakt@teilenummer-service.de">kontakt@teilenummer-service.de</a> widerrufen.'; e.style.display = 'block';
+  }
+};
+</script></body></html>
