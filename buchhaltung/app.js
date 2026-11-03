@@ -1,16 +1,16 @@
-/* Buchhaltung für alle Bereiche (Teilenummer, Heizung, Handwerker-Mappe) – PWA, auch eingebettet in die Zentrale
+/* Buchhaltung für alle Bereiche (Teilenummer, Heizung, Handwerker-Mappe, Pflegegrad-Mappe) – PWA, auch eingebettet in die Zentrale
    Gleiche Apps-Script-Schnittstelle wie die Verwaltungs-App (JSONP + Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.0.1 (25.10.2026, Bereiche)';
+const APP_VERSION = '2.0.2 (03.11.2026, Pflegegrad-Mappe)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const KAT_FALLBACK = {
-  Einnahme: ['Verkäufe (Teilenummer)', 'Verkäufe (Heizung-Störung)', 'Verkäufe (Vorlagen)', 'Sonstige Einnahmen'],
+  Einnahme: ['Verkäufe (Teilenummer)', 'Verkäufe (Heizung-Störung)', 'Verkäufe (Vorlagen)', 'Verkäufe (Pflegegrad-Mappe)', 'Sonstige Einnahmen'],
   Ausgabe: ['Werbung (z. B. Google Ads)', 'Gebühren (PayPal, Bank)', 'Software & Online-Dienste', 'Bürobedarf & Porto',
     'Telefon & Internet', 'Fremdleistungen', 'Arbeitsmittel bis 800 € netto', 'Fachliteratur & Fortbildung',
     'Versicherungen & Beiträge', 'Steuerberatung & Buchführung', 'Sonstige Betriebsausgaben']
 };
 
-const BER_FALLBACK = { teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', allgemein: '🏢 Allgemein' };
+const BER_FALLBACK = { teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', pflege: '💚 Pflegegrad-Mappe', allgemein: '🏢 Allgemein' };
 const $ = s => document.querySelector(s);
 const qs = new URLSearchParams(location.search);
 const EMBED = qs.get('embed') === '1';
