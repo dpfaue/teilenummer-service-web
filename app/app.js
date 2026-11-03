@@ -1,17 +1,17 @@
-/* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe) (PWA)
+/* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe, Pflegegrad-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.0.1 (25.10.2026, Zentrale)';
+const APP_VERSION = '2.0.2 (03.11.2026, Pflegegrad-Mappe)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
 const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
 // Mehrmarken (Entwurf): Anfragen von Heizung-Störung.de kommen mit service 'heizung' aus dem Backend.
-const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe' };
+const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', pflege: '💚 Pflegegrad-Mappe' };
 const svc = r => (r && r.service) || 'teilenummer';
 const HEIZ = r => svc(r) === 'heizung';
-const VORL = r => svc(r) === 'vorlagen';
+const VORL = r => svc(r) === 'vorlagen' || svc(r) === 'pflege'; // Shop-Produkte (automatisch ausgeliefert)
 const svcIcon = r => svc(r) === 'teilenummer' ? '' : BEREICHE[svc(r)].split(' ')[0] + ' ';
 const FELD = r => HEIZ(r) ? { modell: 'Gerät', fin: 'Fehlercode', motor: 'Anlagendruck', teile: '① Ursache / ggf. Ersatzteil' }
   : VORL(r) ? { modell: 'Produkt', fin: 'Firma', motor: '–', teile: '① (nicht nötig – automatisch ausgeliefert)' }
@@ -29,7 +29,10 @@ const VORL_TPL = [
   { t: '📄 Mappe erneut senden', x: 'Hier ist deine Handwerker-Mappe noch einmal – die ZIP-Datei mit allen Vorlagen hängt an. Bitte auch im Spam-Ordner schauen, falls künftig etwas fehlt.' },
   { t: '📄 Logo-Version', x: 'Gern baue ich dein Logo und deine Firmendaten fest in alle Vorlagen ein (Aufpreis 20 €). Schick mir dafür bitte:\n• Logo (PNG oder JPG)\n• Firmenname, Anschrift, Telefon, E-Mail\n\nDu bekommst die fertige Mappe innerhalb von 2 Werktagen.' }
 ];
-const tplsFor = r => HEIZ(r) ? HEIZ_TPL : VORL(r) ? VORL_TPL : tpls;
+const PFLEGE_TPL = [
+  { t: '💚 Mappe erneut senden', x: 'Hier ist deine Pflegegrad-Mappe noch einmal – die ZIP-Datei mit allen Vorlagen hängt an. Bitte auch im Spam-Ordner schauen, falls künftig etwas fehlt.' }
+];
+const tplsFor = r => HEIZ(r) ? HEIZ_TPL : svc(r) === 'pflege' ? PFLEGE_TPL : VORL(r) ? VORL_TPL : tpls;
 const DEFAULT_TPL = [
   { t: 'Teilenummer gefunden', x: 'Für deine FIN {fin} habe ich folgende Teile ermittelt:\n\n{teile}\n\nSuchbegriffe für Shops: \nBezugsquelle: Originalteil beim Vertragshändler oder meist günstiger bei Teilehändlern und Online-Shops – einfach die Teilenummer ins Suchfeld eingeben.{extras}\n\nAchte beim Kauf darauf, dass die Nummer genau übereinstimmt.' },
   { t: 'Mehrere Varianten', x: 'Für deinen {modell} gibt es je nach Ausstattung mehrere Varianten:\n\n1) \n2) \n\nWelche bei dir verbaut ist, erkennst du am einfachsten an: ' },
