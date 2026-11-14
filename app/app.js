@@ -8,11 +8,11 @@ const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
 const STATI = ['offen', 'in Bearbeitung', 'beantwortet', 'erstattet'];
 const FB_VER = '10.12.2'; // Firebase-JS-SDK für Push
 // Mehrmarken (Entwurf): Anfragen von Heizung-Störung.de kommen mit service 'heizung' aus dem Backend.
-const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', pflege: '💚 Pflegegrad-Mappe' };
+const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizung: '🔥 Heizung', vorlagen: '📄 Handwerker-Mappe', pflege: '💚 Pflegegrad-Mappe', nk: '🧮 NK-Abrechner' };
 const svc = r => (r && r.service) || 'teilenummer';
 const HEIZ = r => svc(r) === 'heizung';
-const VORL = r => svc(r) === 'vorlagen' || svc(r) === 'pflege'; // Shop-Produkte (automatisch ausgeliefert)
-const svcIcon = r => svc(r) === 'teilenummer' ? '' : BEREICHE[svc(r)].split(' ')[0] + ' ';
+const VORL = r => svc(r) === 'vorlagen' || svc(r) === 'pflege' || svc(r) === 'nk'; // Shop-Produkte (automatisch ausgeliefert)
+const svcIcon = r => svc(r) === 'teilenummer' ? '' : (BEREICHE[svc(r)] || '📦').split(' ')[0] + ' ';
 const FELD = r => HEIZ(r) ? { modell: 'Gerät', fin: 'Fehlercode', motor: 'Anlagendruck', teile: '① Ursache / ggf. Ersatzteil' }
   : VORL(r) ? { modell: 'Produkt', fin: 'Firma', motor: '–', teile: '① (nicht nötig – automatisch ausgeliefert)' }
   : { modell: 'Modell', fin: 'FIN', motor: 'Motor', teile: '① Gefundene Teile' };
