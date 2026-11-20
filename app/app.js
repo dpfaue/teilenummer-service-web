@@ -1,7 +1,7 @@
 /* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe, Pflegegrad-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.0.2 (03.11.2026, Pflegegrad-Mappe)';
+const APP_VERSION = '2.1.0 (20.11.2026, Heizung übersichtlich)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
@@ -12,19 +12,34 @@ const BEREICHE = { alle: 'Alle Bereiche', teilenummer: '🔧 Teilenummer', heizu
 const svc = r => (r && r.service) || 'teilenummer';
 const HEIZ = r => svc(r) === 'heizung';
 const VORL = r => svc(r) === 'vorlagen' || svc(r) === 'pflege' || svc(r) === 'nk'; // Shop-Produkte (automatisch ausgeliefert)
+const paketName = r => HEIZ(r) ? 'Auskunft' : (PAKETE[r.paket] || r.paket || '');
 const svcIcon = r => svc(r) === 'teilenummer' ? '' : (BEREICHE[svc(r)] || '📦').split(' ')[0] + ' ';
-const FELD = r => HEIZ(r) ? { modell: 'Gerät', fin: 'Fehlercode', motor: 'Anlagendruck', teile: '① Ursache / ggf. Ersatzteil' }
+const FELD = r => HEIZ(r) ? { modell: 'Gerät', fin: 'Fehlercode', motor: 'Anlagendruck', teile: '① Ersatzteil (nur falls bestimmt)' }
   : VORL(r) ? { modell: 'Produkt', fin: 'Firma', motor: '–', teile: '① (nicht nötig – automatisch ausgeliefert)' }
   : { modell: 'Modell', fin: 'FIN', motor: 'Motor', teile: '① Gefundene Teile' };
 let bereich = (function () { try { const v = JSON.parse(localStorage.getItem('z_bereich')); return BEREICHE[v] ? v : 'alle'; } catch (e) { return 'alle'; } })();
 const vrows = () => bereich === 'alle' ? rows : rows.filter(r => svc(r) === bereich);
+const HINWEIS_HZ = 'Meine Einschätzung beruht auf deinen Angaben, Fotos und ggf. dem Video. Sie ersetzt keine Prüfung vor Ort durch einen Fachbetrieb. Arbeiten an Gasweg, Abgasführung und Elektrik dürfen nur Fachbetriebe ausführen.';
+/* Heizungs-Bausteine (20.11.2026): nur Einschätzung + was geprüft werden sollte – KEINE Anleitung (kein „so geht's“). */
 const HEIZ_TPL = [
-  { t: '🔥 Ursache + Schritte', x: 'Der Code {fin} bedeutet bei deinem {modell}: \n\nWahrscheinlichste Ursache in deinem Fall: \n\nDas kannst du selbst gefahrlos prüfen:\n1) \n2) \n3) \n\nWenn das nicht hilft: Bitte einen Fachbetrieb rufen und ihm den Code {fin} nennen – dann weiß er gleich, wo er suchen muss.' },
-  { t: '🔥 Druck auffüllen', x: 'Dein Anlagendruck ({motor}) ist zu niedrig. So füllst du Wasser nach:\n1) Heizung ausschalten und abkühlen lassen.\n2) Füllschlauch an Wasserhahn und Füll-/Entleerhahn (KFE) anschließen, Schlauch vorher mit Wasser füllen (keine Luft).\n3) Hähne langsam öffnen, bis das Manometer kalt ca. 1,5 bar zeigt (Herstellerangabe beachten).\n4) Hähne schließen, Schlauch abnehmen, Heizung einschalten und entstören.\n\nVerliert die Anlage innerhalb weniger Tage wieder Druck, liegt ein Leck oder ein defektes Ausdehnungsgefäß vor – dann bitte vom Fachbetrieb prüfen lassen.' },
-  { t: '🔥 Fachbetrieb nötig', x: 'Bei diesem Fehler geht es um Teile, an denen laut Gesetz nur ein eingetragener Fachbetrieb arbeiten darf (Gasweg/Abgas). Bitte selbst nichts öffnen.\n\nWas du dem Fachbetrieb sagen kannst, damit es schnell geht:\n• Gerät: {modell}\n• Fehlercode: {fin}\n• Vermutete Ursache: \n\nSo vermeidest du unnötige Suchstunden auf der Rechnung.' },
-  { t: '🔥 Rückfrage', x: 'Damit ich die Ursache eingrenzen kann, brauche ich noch kurz:\n\n• \n\nEin Foto vom Display und vom Typenschild hilft auch. Sobald ich die Antwort habe, melde ich mich.' },
-  { t: '🔥 Nicht lösbar → Erstattung', x: 'Leider kann ich die Ursache für deinen {modell} aus der Ferne nicht sicher eingrenzen. Grund: \n\nDeshalb erstatte ich dir den vollen Betrag über PayPal – das Geld ist in den nächsten Tagen wieder auf deinem Konto.' }
+  { t: '🔥 Einschätzung Störung', x: 'Der Fehlercode {fin} bedeutet bei deinem {modell}: \n\nWahrscheinliche Ursachen (die wahrscheinlichste zuerst):\n1) \n2) \n\nWas geprüft werden sollte:\n• \n• \n\nFür deinen Fachbetrieb – damit er gleich weiß, wo er ansetzen muss:\n• Gerät: {modell}\n• Fehlercode: {fin}\n• Anlagendruck: {motor}\n• Vermutete Ursache: \n\n' + HINWEIS_HZ },
+  { t: '🔥 Anlagendruck zu niedrig', x: 'Dein Anlagendruck ({motor}) liegt unter dem Bereich, den die meisten Hersteller im kalten Zustand vorgeben (meist etwa 1,0 bis 2,0 bar – der genaue Wert steht in der Anleitung deines Geräts). Bei zu wenig Druck schaltet das Gerät zum Schutz ab.\n\nDer Druck sollte wieder auf den Sollwert gebracht werden.\n\nFällt er danach innerhalb weniger Tage erneut ab, sollte geprüft werden:\n• Undichtigkeiten an Heizkörpern, Ventilen und Leitungen\n• Vordruck des Ausdehnungsgefäßes\n• Sicherheitsventil (tropft es?)\n\n' + HINWEIS_HZ },
+  { t: '🔩 Ersatzteil bestimmt', x: 'Für deinen {modell} passt nach deinen Angaben und dem Typenschild folgendes Ersatzteil:\n\n{teile}\n\nBitte die Nummer vor dem Kauf noch einmal mit dem Typenschild bzw. der Ersatzteilliste des Herstellers abgleichen. Der Einbau sollte durch einen Fachbetrieb erfolgen.\n\n' + HINWEIS_HZ },
+  { t: '🔥 Fachbetrieb nötig', x: 'Bei diesem Fehler geht es um Bauteile, an denen nur ein eingetragener Fachbetrieb arbeiten darf (Gasweg/Abgas). Bitte selbst nichts öffnen.\n\nWas du dem Fachbetrieb sagen kannst, damit es schnell geht:\n• Gerät: {modell}\n• Fehlercode: {fin}\n• Vermutete Ursache: \n\nSo vermeidest du unnötige Suchzeit auf der Rechnung.' },
+  { t: '❓ Rückfrage', attach: false, x: 'Damit ich die Ursache eingrenzen kann, brauche ich noch kurz:\n\n• \n\nEin Foto vom Display und vom Typenschild (oder ein kurzes Video) hilft auch. Antworte einfach auf diese E-Mail – sobald ich die Antwort habe, melde ich mich.' },
+  { t: '💸 Keine Einschätzung → Erstattung', attach: false, x: 'Leider kann ich die Ursache für deinen {modell} aus der Ferne nicht sicher einschätzen. Grund: \n\nDeshalb bekommst du den vollen Betrag über PayPal erstattet – das Geld ist in den nächsten Tagen wieder auf deinem Konto.' }
 ];
+const HEIZ_TEILE = ['Zündelektrode', 'Ionisations-/Überwachungselektrode', 'Zündtrafo', 'Gasarmatur / Gasventil', 'Gebläse', 'Druckwächter / Luftdruckschalter',
+  'Umwälzpumpe', 'Wasserdrucksensor', 'Wassermangelsicherung', 'Ausdehnungsgefäß', 'Sicherheitsventil 3 bar', 'Vorlauffühler (NTC)', 'Rücklauffühler (NTC)',
+  'Abgasfühler / Abgastemperaturbegrenzer', 'Sicherheitstemperaturbegrenzer (STB)', '3-Wege-Ventil (Motor)', '3-Wege-Ventil (Kartusche)', 'Plattenwärmetauscher',
+  'Wärmetauscher (primär)', 'Steuerplatine / Leiterplatte', 'Bedienteil / Display', 'Siphon / Kondensatablauf', 'Brennerdichtung', 'Außenfühler', 'Durchflusssensor'];
+/* Kennzeichen einer Heizungs-Anfrage aus dem Formular: Anliegen steht als [..] vor der Beschreibung, Video-Links enden auf #video */
+const anliegen = r => { const m = String(r.problem || '').match(/^\[(Störung klären|Ersatzteil bestimmen)\]\s*/); return m ? m[1] : ''; };
+const problemOhneAnliegen = r => String(r.problem || '').replace(/^\[(Störung klären|Ersatzteil bestimmen)\]\s*/, '');
+const isVideo = u => /#video$/.test(String(u || ''));
+/* Anleitungs-Check vor dem Senden (Heizung): Dominic gibt nur Einschätzungen, keine Handlungsanleitungen. */
+const ANLEITUNG_RX = /(so (füllst|machst|gehst|prüfst)|schritt\s*\d|^\s*\d\)\s*(heizung|hahn|schlauch|ventil|taste|gerät)|aufschraub|abschraub|schraube (los|ab|auf)|gehäuse (öffnen|abnehmen)|verkleidung (öffnen|abnehmen)|drück(e|en sie)? (die|den|auf)|entlüfte (die|den)|füll(e|st) (wasser|nach)|schlauch anschließ|hähne? (öffnen|schließen))/im;
+const MARKE_MAIL = { heizung: { dativ: 'deiner', objekt: 'Heizung', name: 'Heizung-Störung.de' } }; // muss zu MARKEN in Code.gs passen
 const VORL_TPL = [
   { t: '📄 Mappe erneut senden', x: 'Hier ist deine Handwerker-Mappe noch einmal – die ZIP-Datei mit allen Vorlagen hängt an. Bitte auch im Spam-Ordner schauen, falls künftig etwas fehlt.' },
   { t: '📄 Logo-Version', x: 'Gern baue ich dein Logo und deine Firmendaten fest in alle Vorlagen ein (Aufpreis 20 €). Schick mir dafür bitte:\n• Logo (PNG oder JPG)\n• Firmenname, Anschrift, Telefon, E-Mail\n\nDu bekommst die fertige Mappe innerhalb von 2 Werktagen.' }
@@ -267,13 +282,13 @@ function updatePdfState(r) {
   el.className = 'pdf-state' + (pdfAktuell(r) ? ' ok' : '');
   el.innerHTML = pdfAktuell(r)
     ? `✓ PDF ${esc(r.rechnungsnummer || '')} ist aktuell · <a href="${esc(r.pdfLink)}" target="_blank" rel="noopener">ansehen ↗</a>`
-    : (r.pdfLink ? '⚠️ Teile geändert – PDF wird beim Senden (mit Häkchen) automatisch aktualisiert' : (hasParts ? 'Noch kein PDF – wird beim Senden (mit Häkchen) automatisch erstellt' : 'Noch keine Teile eingetragen'));
+    : (r.pdfLink ? '⚠️ Teile geändert – PDF wird beim Senden (mit Häkchen) automatisch aktualisiert' : (hasParts || HEIZ(r) ? 'Noch keine Rechnung – wird beim Senden (mit Häkchen) automatisch erstellt' : 'Noch keine Teile eingetragen'));
 }
 function renderParts(r, focus) {
   const box = $('#partsBox'); if (!box) return;
   box.innerHTML = curParts.map((p, i) => `<div class="prow" data-i="${i}">
       <span class="pnum">${i + 1}</span>
-      <input class="pb" data-f="b" placeholder="Bezeichnung, z. B. Bremsscheibe vorn links" list="dlTeile" value="${esc(p.b)}" autocomplete="off">
+      <input class="pb" data-f="b" placeholder="${HEIZ(r) ? 'Bezeichnung, z. B. Zündelektrode' : 'Bezeichnung, z. B. Bremsscheibe vorn links'}" list="dlTeile" value="${esc(p.b)}" autocomplete="off">
       <input class="pn" data-f="n" placeholder="Teilenummer" value="${esc(p.n)}" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <input class="ph" data-f="h" placeholder="Hinweis (optional)" value="${esc(p.h)}" autocomplete="off">
       <span class="pact"><button type="button" data-dup="${i}" title="Zeile kopieren (z. B. links → rechts)">⧉</button><button type="button" data-del="${i}" title="Zeile löschen">✕</button></span>
@@ -299,9 +314,10 @@ function renderParts(r, focus) {
   if (focus) { const el = box.querySelector(`.prow[data-i="${focus[0]}"] [data-f="${focus[1]}"]`); if (el) el.focus(); }
   updatePdfState(r);
 }
-function teileVorschlaege() {
-  const set = new Set(TEIL_VORSCHLAEGE);
-  rows.forEach(x => partsParse(x.ersatzteile).forEach(p => p.b && set.add(p.b)));
+function teileVorschlaege(r) {
+  const heiz = r && HEIZ(r);
+  const set = new Set(heiz ? HEIZ_TEILE : TEIL_VORSCHLAEGE);
+  rows.filter(x => HEIZ(x) === !!heiz).forEach(x => partsParse(x.ersatzteile).forEach(p => p.b && set.add(p.b)));
   return [...set].sort((a, b) => a.localeCompare(b, 'de')).map(v => `<option value="${esc(v)}">`).join('');
 }
 
@@ -311,7 +327,7 @@ function fillTpl(text, r) {
   const extras = (r.paket === 'express' || r.paket === 'premium')
     ? '\n\nPassend dazu (Dichtungen, Schrauben, Zubehör):\n• \n\nDirekte Links:\n• ' : '';
   return text.replace(/\{teile\}/g, teile).replace(/\{extras\}/g, extras).replace(/\{vorname\}/g, vorname).replace(/\{modell\}/g, r.modell || (HEIZ(r) ? 'Gerät' : 'Fahrzeug')).replace(/\{baujahr\}/g, r.baujahr || '')
-    .replace(/\{fin\}/g, r.fin || '').replace(/\{motor\}/g, r.motor || '');
+    .replace(/\{fin\}/g, r.fin || (HEIZ(r) ? '(ohne Code)' : '')).replace(/\{motor\}/g, r.motor || (HEIZ(r) ? 'nicht angegeben' : ''));
 }
 
 function updateBadges() {
@@ -338,7 +354,7 @@ function renderChips() {
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
   let list = filter === 'alle' ? vrows().slice() : vrows().filter(r => (r.status || 'offen') === filter);
-  if (q) list = list.filter(r => [r.name, r.email, r.fin, r.modell, r.problem, r.orderId].join(' ').toLowerCase().includes(q));
+  if (q) list = list.filter(r => [r.name, r.email, r.fin, r.modell, r.motor, r.problem, r.orderId].join(' ').toLowerCase().includes(q));
   const offen = s => s === 'offen' || s === 'in Bearbeitung';
   list.sort((a, b) => (offen(a.status) && offen(b.status)) ? new Date(a.frist || 8e15) - new Date(b.frist || 8e15) : new Date(b.eingang) - new Date(a.eingang));
   if (!list.length) { $('#list').innerHTML = `<div class="empty">${vrows().length ? 'Keine Anfragen in dieser Ansicht.' : 'Noch keine Anfragen.'}</div>`; return; }
@@ -346,9 +362,9 @@ function renderList() {
     const d = dueInfo(r);
     return `<button class="item" data-id="${esc(r.orderId)}">
       <div class="row1"><div><div class="name">${r.kundenAntwortUngelesen ? '<span class="dot"></span>' : ''}${esc(r.name || '–')}</div>
-      <div class="sub">${svcIcon(r)}${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}${HEIZ(r) && r.fin ? ' · ' + esc(r.fin) : ''}</div></div>
+      <div class="sub">${svcIcon(r)}${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}${HEIZ(r) && r.fin ? ' · <b class="hz-code-s">' + esc(r.fin) + '</b>' : ''}${HEIZ(r) && r.motor ? ' · ' + esc(r.motor) : ''}</div></div>
       <span class="pill ${stClass(r.status)}">${esc(r.status || 'offen')}</span></div>
-      <div class="meta"><span class="pkg">${esc(PAKETE[r.paket] || r.paket || '')} · ${euro(r.preis)}</span>
+      <div class="meta">${HEIZ(r) && anliegen(r) ? `<span class="hz-tag ${anliegen(r) === 'Ersatzteil bestimmen' ? 'teil' : ''}">${anliegen(r) === 'Ersatzteil bestimmen' ? '🔩' : '🔥'} ${esc(anliegen(r))}</span>` : ''}<span class="pkg">${esc(paketName(r))} · ${euro(r.preis)}</span>
       ${d ? `<span class="due ${d.cls}">⏱ ${esc(d.txt)}</span>` : `<span class="dim small">${esc(ago(r.eingang))}</span>`}
       ${r.quelle && r.quelle !== 'direkt' ? `<span class="pkg">${esc(r.quelle)}</span>` : ''}</div></button>`;
   }).join('');
@@ -363,7 +379,7 @@ function renderDetail() {
   const d = dueInfo(r);
   const statusBtns = STATI.filter(s => s !== (r.status || 'offen')).map(s =>
     `<button class="btn ghost small" data-st="${esc(s)}">${{ offen: 'Wieder öffnen', 'in Bearbeitung': 'In Bearbeitung', beantwortet: 'Als beantwortet markieren', erstattet: '💸 Als erstattet markieren' }[s]}</button>`).join('');
-  $('#detail').innerHTML = `
+  $('#detail').innerHTML = HEIZ(r) ? heizDetailHtml(r, d, statusBtns) : `
     <div class="d-head"><div><h2>${esc(r.name || '–')}</h2><div class="dim">${esc(r.modell || '')} ${r.baujahr ? '(' + esc(r.baujahr) + ')' : ''}</div></div>
       <span class="pill ${stClass(r.status)}">${esc(r.status || 'offen')}</span></div>
     ${d ? `<div class="due ${d.cls}" style="margin-top:8px">⏱ ${esc(d.txt)} (bis ${esc(fmt(r.frist))})</div>` : ''}
@@ -396,7 +412,7 @@ function renderDetail() {
 
     <div class="section-title">${FELD(r).teile}</div>
     <div class="card">
-      <datalist id="dlTeile">${teileVorschlaege()}</datalist>
+      <datalist id="dlTeile">${teileVorschlaege(r)}</datalist>
       <div class="parts" id="partsBox"></div>
       <div class="actions">
         <button class="btn ghost small" id="addPart">+ Teil</button>
@@ -434,7 +450,7 @@ function renderDetail() {
   $('#partsToReply').addEventListener('click', () => {
     const list = partsForMail(curParts); if (!list) return toast('Erst mindestens ein Teil eintragen.', 'bad');
     const ta = $('#replyText');
-    insertIntoReply(ta, ta.value.trim() ? list : fillTpl(tpls.find(t => /\{teile\}/.test(t.x))?.x || '{teile}', r));
+    insertIntoReply(ta, ta.value.trim() ? list : fillTpl(tplsFor(r).find(t => /\{teile\}/.test(t.x))?.x || '{teile}', r));
   });
   $('#replyFiles').addEventListener('change', e => { if (e.target.files.length) { $('#attachPdf').checked = true; setDraft(r.orderId, { attach: '1' }); } });
   $('#attachPdf').addEventListener('change', e => setDraft(r.orderId, { attach: e.target.checked ? '1' : '0' }));
@@ -449,11 +465,97 @@ function renderDetail() {
   document.querySelectorAll('#detail [data-tpl]').forEach(b => b.addEventListener('click', () => {
     const t = tplsFor(r)[+b.dataset.tpl]; if (!t) return;
     insertIntoReply($('#replyText'), fillTpl(t.x, r));
+    if (t.attach === false && $('#attachPdf')) { $('#attachPdf').checked = false; setDraft(r.orderId, { attach: '0' }); toast('Ohne Rechnung – Häkchen entfernt', 'good'); }
   }));
   document.querySelectorAll('#detail [data-pl]').forEach(b => b.addEventListener('click', () => {
     try { navigator.clipboard.writeText(b.dataset.pl).then(() => toast('FIN kopiert – in Partslink24 einfügen', 'good'), () => {}); } catch (e) {}
     window.open('https://www.partslink24.com/', '_blank', 'noopener');
   }));
+}
+
+/* ---------- Heizung: eigenes, aufgeräumtes Detail (20.11.2026) ---------- */
+function heizDetailHtml(r, d, statusBtns) {
+  const an = anliegen(r), teil = an === 'Ersatzteil bestimmen';
+  const files = (r.fotos || []).filter(Boolean);
+  let nf = 0, nv = 0;
+  const media = files.map(u => !/^https?:/.test(u) ? `<span class="dim small">${esc(u)}</span>`
+    : isVideo(u) ? `<a class="vid" href="${esc(u)}" target="_blank" rel="noopener">🎥 Video${++nv > 1 ? ' ' + nv : ''}</a>`
+    : `<a href="${esc(u)}" target="_blank" rel="noopener">📷 Foto ${++nf}</a>`).join('') || '<span class="dim small">keine</span>';
+  const q = s => 'https://www.google.com/search?q=' + encodeURIComponent(s);
+  const geraet = r.modell || '';
+  return `
+    <div class="d-head"><div><h2>${esc(r.name || '–')}</h2><div class="dim">🔥 Heizung-Störung.de · ${esc(fmt(r.eingang))}</div></div>
+      <span class="pill ${stClass(r.status)}">${esc(r.status || 'offen')}</span></div>
+    ${d ? `<div class="due ${d.cls}" style="margin-top:8px">⏱ ${esc(d.txt)} (bis ${esc(fmt(r.frist))})</div>` : ''}
+    ${(r.status || 'offen') === 'offen' ? `<div class="actions"><button class="btn small" data-st="in Bearbeitung">▶ Übernehmen (in Bearbeitung)</button></div>` : ''}
+
+    <div class="hz-card">
+      <div class="hz-top">
+        ${an ? `<span class="hz-tag big ${teil ? 'teil' : ''}">${teil ? '🔩' : '🔥'} ${esc(an)}</span>` : ''}
+        <span class="hz-geraet">${esc(geraet || 'Gerät nicht angegeben')}</span>
+      </div>
+      <div class="hz-grid">
+        <div><span>Fehlercode</span><b class="hz-code">${esc(r.fin || '–')}</b>${r.fin ? `<button class="copy" data-copy="${esc(r.fin)}">kopieren</button>` : ''}</div>
+        <div><span>Anlagendruck</span><b>${esc(r.motor || '–')}</b></div>
+      </div>
+      <div class="section-title" style="margin-top:12px">Beschreibung des Kunden</div>
+      <div class="box">${esc(problemOhneAnliegen(r) || '–')}</div>
+      <div class="section-title">Fotos &amp; Video</div>
+      <div class="photos">${media}</div>
+    </div>
+
+    <div class="tools">
+      <a href="${q([geraet, 'Fehler', r.fin].filter(Boolean).join(' '))}" target="_blank" rel="noopener">🌐 Fehlercode googeln</a>
+      <a href="${q([geraet, 'Installationsanleitung pdf'].filter(Boolean).join(' '))}" target="_blank" rel="noopener">📘 Hersteller-Unterlagen</a>
+      <a href="${q([geraet, 'Ersatzteil', teil ? '' : r.fin].filter(Boolean).join(' '))}" target="_blank" rel="noopener">🔩 Ersatzteile suchen</a>
+    </div>
+
+    ${r.antwort ? `<div class="section-title">Letzte Antwort (${esc(fmt(r.antwortDatum))})</div><div class="box">${esc(r.antwort)}</div>` : ''}
+    ${r.threadId ? `<a class="mail-link${r.kundenAntwortUngelesen ? ' unread' : ''}" href="${gmailThread(r.threadId)}" target="_blank" rel="noopener">${r.kundenAntwortUngelesen ? '🔵 Neue Antwort vom Kunden – in Gmail öffnen ↗' : '📧 Mail-Verlauf in Gmail öffnen ↗'}</a>` : ''}
+
+    <div class="section-title">① Antwort schreiben</div>
+    <div class="card">
+      <div class="hz-rule">✔ Einschätzung + was geprüft werden sollte · ✘ keine Anleitung, wie man es macht</div>
+      <div class="tpls">${HEIZ_TPL.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
+      <textarea id="replyText" placeholder="Baustein antippen und Lücken füllen – „Hallo …“ und Grußformel ergänzt das System automatisch (siehe Vorschau).">${esc(getDraft(r.orderId).reply || '')}</textarea>
+      <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
+    </div>
+
+    <details class="card hz-parts" ${teil || partsText(partsParse(r.ersatzteile)) || getDraft(r.orderId).parts ? 'open' : ''}>
+      <summary>② Ersatzteil mit Nummer <span class="dim small">(nur falls bestimmt – erscheint auch auf der Rechnung)</span></summary>
+      <datalist id="dlTeile">${teileVorschlaege(r)}</datalist>
+      <div class="parts" id="partsBox" style="margin-top:10px"></div>
+      <div class="actions">
+        <button class="btn ghost small" id="addPart">+ Teil</button>
+        <button class="btn ghost small" id="partsToReply">📝 In Antwort übernehmen</button>
+      </div>
+    </details>
+
+    <div class="section-title">③ Senden</div>
+    <div class="card">
+      <label class="check"><input type="checkbox" id="attachPdf" ${attachDefault(r) ? 'checked' : ''}> 📎 Rechnung als PDF anhängen</label>
+      <div class="pdf-state" id="pdfState"></div>
+      <div class="file">Weitere PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
+      <div class="dim small" id="attList"></div>
+      <div class="actions"><button class="btn ghost small" id="previewBtn">👁 Vorschau der Mail</button><button class="btn ghost small" id="genPdf">📄 Rechnung jetzt erstellen</button></div>
+      <div class="box mail-preview" id="mailPreview" hidden></div>
+      <button class="btn" id="sendReply" style="margin-top:10px">✉️ Antwort senden</button>
+    </div>
+
+    <details class="card hz-info">
+      <summary>Kunde &amp; Zahlung</summary>
+      <div class="kv">
+        <div class="wide">E-Mail<b><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></b></div>
+        <div>Leistung<b>Persönliche Auskunft · ${euro(r.preis)}</b></div>
+        <div>Quelle<b>${esc(r.quelle || '–')}</b></div>
+        <div class="wide">Zahlung<b style="${String(r.zahlungCheck || '').startsWith('ABWEICHUNG') ? 'color:var(--bad)' : ''}">${esc(r.zahlungCheck || '–')}</b></div>
+        <div class="wide">PayPal-Order-ID<b>${esc(r.orderId || '–')}</b></div>
+        ${r.rechnungsnummer ? `<div>Rechnungsnummer<b>${esc(r.rechnungsnummer)}</b></div>` : ''}
+      </div>
+    </details>
+
+    <div class="section-title">Status</div>
+    <div class="actions">${statusBtns}</div>`;
 }
 
 async function setStatus(r, status, btn) {
@@ -498,11 +600,12 @@ function mailPreview(r, text) {
   let out = '';
   if (!hatAnrede) {
     out += 'Hallo ' + vorname + ',\n\n';
-    if (first) out += 'danke für deine Anfrage zu deinem ' + (r.modell || 'Fahrzeug') + (r.baujahr ? ' (' + r.baujahr + ')' : '') + '!\n\n';
+    const mk = MARKE_MAIL[svc(r)];
+    if (first) out += 'danke für deine Anfrage zu ' + (mk ? mk.dativ : 'deinem') + ' ' + (r.modell || (mk ? mk.objekt : 'Fahrzeug')) + (r.baujahr ? ' (' + r.baujahr + ')' : '') + '!\n\n';
   }
   out += text;
   if (first) out += '\n\nFalls noch etwas unklar ist, antworte einfach auf diese E-Mail.';
-  if (!hatGruss) out += '\n\nViele Grüße\nDominic\nTeilenummer.Service';
+  if (!hatGruss) out += '\n\nViele Grüße\nDominic\n' + ((MARKE_MAIL[svc(r)] || {}).name || 'Teilenummer.Service');
   return out;
 }
 async function loadAttachments(r) {
@@ -528,9 +631,10 @@ async function sendReply(r, btn) {
   if (text.length > 20000) return toast('Antwort zu lang – längere Teile bitte als PDF anhängen.', 'bad');
   const files = Array.from($('#replyFiles').files || []);
   const attach = $('#attachPdf').checked;
-  const needPdf = attach && partsText(curParts) && !pdfAktuell(r);
-  if (attach && !partsText(curParts) && !r.pdfLink && !files.length) return toast('Für die Rechnung erst Teile eintragen – oder das Häkchen „Rechnung anhängen“ entfernen.', 'bad');
+  const needPdf = attach && (partsText(curParts) || HEIZ(r)) && !pdfAktuell(r);
+  if (attach && !HEIZ(r) && !partsText(curParts) && !r.pdfLink && !files.length) return toast('Für die Rechnung erst Teile eintragen – oder das Häkchen „Rechnung anhängen“ entfernen.', 'bad');
   const luecken = findLuecken(text);
+  if (HEIZ(r)) { const a = text.match(ANLEITUNG_RX); if (a && !confirm('Das klingt nach einer Anleitung („' + a[0].trim() + '“).\n\nDu gibst nur eine Einschätzung und sagst, was geprüft werden sollte – nicht, wie man es macht.\n\nTrotzdem so senden?')) return; }
   if (luecken.length && !confirm('In der Antwort ist noch etwas nicht ausgefüllt:\n\n• ' + luecken.join('\n• ') + '\n\nTrotzdem so senden?')) return;
   if (!confirm(`Antwort an ${r.email} senden?` + (attach ? '\n\n📎 Mit Rechnung als PDF' + (needPdf ? ' (wird jetzt erstellt)' : '') : '\n\nOhne Anhang'))) return;
   btn.disabled = true; btn.textContent = needPdf ? 'Erstelle PDF …' : 'Sende …';
@@ -575,13 +679,13 @@ async function genPdf(r, btn) {
   btn.disabled = true; const o = btn.textContent; btn.textContent = 'Erstelle …';
   try {
     const t = partsText(curParts);
-    if (!t) throw new Error('Erst mindestens ein Teil eintragen.');
+    if (!t && !HEIZ(r)) throw new Error('Erst mindestens ein Teil eintragen.');
     const stashId = rid();
     await postNoCors({ kind: 'admin_stash', adminKey, stashId, text: '', ersatzteile: t });
     const res = await api({ action: 'generatePdf', orderId: r.orderId, stashId }, 60000);
     if (!res.ok) throw new Error(res.error);
     setDraft(r.orderId, { parts: undefined }); r.ersatzteile = t; r.pdfLink = res.url; r.rechnungsnummer = res.invoiceNumber; updatePdfState(r);
-    toast('PDF erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); if (document.activeElement) document.activeElement.blur(); await refresh(true); renderDetail();
+    toast((HEIZ(r) ? 'Rechnung' : 'PDF') + ' erstellt (Nr. ' + res.invoiceNumber + ')', 'good'); if (document.activeElement) document.activeElement.blur(); await refresh(true); renderDetail();
   } catch (err) { toast('Fehler: ' + err.message, 'bad'); }
   finally { btn.disabled = false; btn.textContent = o; }
 }
