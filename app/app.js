@@ -1,7 +1,7 @@
 /* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe, Pflegegrad-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.1.0 (20.11.2026, Heizung übersichtlich)';
+const APP_VERSION = '2.2.0 (20.11.2026, Antwort-Assistent Heizung)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
@@ -513,11 +513,11 @@ function heizDetailHtml(r, d, statusBtns) {
     ${r.antwort ? `<div class="section-title">Letzte Antwort (${esc(fmt(r.antwortDatum))})</div><div class="box">${esc(r.antwort)}</div>` : ''}
     ${r.threadId ? `<a class="mail-link${r.kundenAntwortUngelesen ? ' unread' : ''}" href="${gmailThread(r.threadId)}" target="_blank" rel="noopener">${r.kundenAntwortUngelesen ? '🔵 Neue Antwort vom Kunden – in Gmail öffnen ↗' : '📧 Mail-Verlauf in Gmail öffnen ↗'}</a>` : ''}
 
-    <div class="section-title">① Antwort schreiben</div>
+    <div class="section-title">① Antwort</div>
     <div class="card">
-      <div class="hz-rule">✔ Einschätzung + was geprüft werden sollte · ✘ keine Anleitung, wie man es macht</div>
-      <div class="tpls">${HEIZ_TPL.map((t, i) => `<button class="chip" data-tpl="${i}">${esc(t.t)}</button>`).join('')}</div>
-      <textarea id="replyText" placeholder="Baustein antippen und Lücken füllen – „Hallo …“ und Grußformel ergänzt das System automatisch (siehe Vorschau).">${esc(getDraft(r.orderId).reply || '')}</textarea>
+      <button class="btn hz-assist" id="hzAssistBtn" type="button">✍️ Antwort zusammenstellen</button>
+      <div class="hz-rule">Art wählen, Ursachen + Prüfpunkte antippen, fertig. ✔ Einschätzung + was geprüft werden sollte · ✘ keine Anleitung</div>
+      <textarea id="replyText" placeholder="Hier landet die Antwort aus „Antwort zusammenstellen“ – du kannst sie danach noch frei ändern. „Hallo …“ und Grußformel ergänzt das System automatisch.">${esc(getDraft(r.orderId).reply || '')}</textarea>
       <div class="draft-note" id="draftNote">${getDraft(r.orderId).reply ? '💾 Entwurf gespeichert' : ''}</div>
     </div>
 
