@@ -1,7 +1,7 @@
 /* Zentrale – Verwaltungs-App für alle Bereiche (Teilenummer.Service, Heizung-Störung.de, Handwerker-Mappe, Pflegegrad-Mappe) (PWA)
    Spricht dieselbe Apps-Script-Schnittstelle an wie admin.html (JSONP, geschützt per Admin-Schlüssel). */
 'use strict';
-const APP_VERSION = '2.2.0 (20.11.2026, Antwort-Assistent Heizung)';
+const APP_VERSION = '2.3.0 (20.11.2026, Claude-Prüfung Heizung)';
 const API = 'https://script.google.com/macros/s/AKfycbz5uEEaTn5Pe-ec-33u-pvSRlJCKSAYdsRV3CgDyBfdfGwoHiEGjb46DXZIARyjO293aA/exec';
 const GMAIL = 'https://mail.google.com/mail/?authuser=teilenummer.service@gmail.com';
 const PAKETE = { basis: 'Basis', express: 'Express', premium: 'Premium' };
@@ -537,7 +537,7 @@ function heizDetailHtml(r, d, statusBtns) {
       <div class="pdf-state" id="pdfState"></div>
       <div class="file">Weitere PDF(s) anhängen: <input type="file" id="replyFiles" accept="application/pdf" multiple></div>
       <div class="dim small" id="attList"></div>
-      <div class="actions"><button class="btn ghost small" id="previewBtn">👁 Vorschau der Mail</button><button class="btn ghost small" id="genPdf">📄 Rechnung jetzt erstellen</button></div>
+      <div class="actions"><button class="btn ghost small" id="previewBtn">👁 Vorschau der Mail</button><button class="btn ghost small" id="genPdf">📄 Rechnung jetzt erstellen</button><button class="btn ghost small" id="hzReviewBtn" type="button">🤖 Von Claude prüfen lassen</button></div>
       <div class="box mail-preview" id="mailPreview" hidden></div>
       <button class="btn" id="sendReply" style="margin-top:10px">✉️ Antwort senden</button>
     </div>

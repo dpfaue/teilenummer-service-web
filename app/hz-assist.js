@@ -88,8 +88,8 @@
 
   const codeNorm = c => String(c || '').toUpperCase().replace(/[\s.\-]/g, '');
   function codeInfo(r) {
-    const m = String(r.modell || '').toLowerCase(), c = codeNorm(r.fin);
-    for (const b of Object.keys(CODES)) if (m.includes(b) && CODES[b][c]) return CODES[b][c];
+    const m = String(r.modell || '').toLowerCase(), c = codeNorm(r.fin), c1 = codeNorm(String(r.fin || '').trim().split(/\s+/)[0]); // „6A 227“ → auch „6A“
+    for (const b of Object.keys(CODES)) if (m.includes(b) && (CODES[b][c] || CODES[b][c1])) return CODES[b][c] || CODES[b][c1];
     return null;
   }
   const defState = r => {
@@ -236,4 +236,48 @@
   }
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#hzAssistBtn')) open(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('haOverlay')) close(); });
+})();
+
+/* ---------- Von Claude prüfen lassen (20.11.2026): Anfrage + Antwortentwurf als fertige Frage an claude.ai ----------
+   Ohne Name/E-Mail des Kunden (Datenschutz). Fotos/Video werden nur erwähnt – bei Bedarf selbst im Chat anhängen. */
+(function () {
+  function prompt(r, text) {
+    const vor = String(r.name || '').trim().split(/\s+/)[0] || '';
+    let mail = mailPreview(r, text);
+    if (vor) mail = mail.split(vor).join('[Kunde]');
+    const files = (r.fotos || []).filter(Boolean), nv = files.filter(isVideo).length, nf = files.length - nv;
+    return [
+      'Bitte prüfe meine Antwort an einen Kunden von Heizung-Störung.de, bevor ich sie abschicke.',
+      '',
+      'Mein Angebot: persönliche schriftliche Einschätzung (14,90 €) durch einen SHK-Kundendiensttechniker – nur auf Basis der Kundenangaben und Fotos. Grundsatz: Ich sage, was der Fehler bedeutet, welche Ursachen wahrscheinlich sind und WAS geprüft werden sollte – aber KEINE Anleitung, WIE man etwas macht. Arbeiten an Gasweg, Abgas und Elektrik nur durch den Fachbetrieb.',
+      '',
+      '— ANFRAGE DES KUNDEN —',
+      'Anliegen: ' + (anliegen(r) || '–'),
+      'Gerät: ' + (r.modell || '–'),
+      'Fehlercode: ' + (r.fin || '–'),
+      'Anlagendruck: ' + (r.motor || '–'),
+      'Beschreibung: ' + (problemOhneAnliegen(r) || '–'),
+      'Anhänge: ' + nf + ' Foto(s)' + (nv ? ', ' + nv + ' Video' : '') + ' (hänge ich bei Bedarf an)',
+      '',
+      '— MEIN ANTWORTENTWURF (so geht die Mail raus) —',
+      mail,
+      '',
+      '— BITTE PRÜFEN —',
+      '1. Fachlich: Passt die Bedeutung des Codes zu diesem Gerät? Sind die Ursachen plausibel und sinnvoll sortiert? Fehlt etwas Wichtiges oder ist etwas falsch? Bei Ersatzteilnummern: passt die Nummer zum Gerät (wenn du es nicht sicher weißt, sag das)?',
+      '2. Rechtlich/Haftung: Enthält der Text irgendwo eine Handlungsanleitung („so machst du …“) oder etwas, das der Kunde nicht selbst tun darf? Ist der Hinweis auf den Fachbetrieb klar?',
+      '3. Sprache: Rechtschreibung, Klarheit, Doppelungen, Ton (Du-Form, freundlich, kurz).',
+      'Gib mir zuerst eine kurze Liste der Probleme (wichtigste zuerst) und danach den verbesserten Antworttext komplett zum Kopieren – nur den Teil zwischen Anrede und Grußformel.'
+    ].join('\n');
+  }
+  document.addEventListener('click', async e => {
+    if (!e.target.closest || !e.target.closest('#hzReviewBtn')) return;
+    const r = rows.find(x => String(x.orderId) === String(detailId)); if (!r) return;
+    const ta = document.getElementById('replyText'), text = ta ? ta.value.trim() : '';
+    if (!text) return toast('Erst eine Antwort schreiben oder zusammenstellen.', 'bad');
+    const p = prompt(r, text);
+    let copied = false; try { await navigator.clipboard.writeText(p); copied = true; } catch (err) {}
+    const url = 'https://claude.ai/new?q=' + encodeURIComponent(p);
+    window.open(url.length < 14000 ? url : 'https://claude.ai/new', '_blank', 'noopener');
+    toast(copied ? 'Claude geöffnet – Text ist auch in der Zwischenablage (falls nötig einfügen)' : 'Claude geöffnet', 'good');
+  });
 })();
