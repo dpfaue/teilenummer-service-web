@@ -249,7 +249,7 @@
     return [
       'Bitte prüfe meine Antwort an einen Kunden von Heizung-Störung.de, bevor ich sie abschicke.',
       '',
-      'Mein Angebot: persönliche schriftliche Einschätzung (14,90 €) durch einen SHK-Kundendiensttechniker – nur auf Basis der Kundenangaben und Fotos. Grundsatz: Ich sage, was der Fehler bedeutet, welche Ursachen wahrscheinlich sind und WAS geprüft werden sollte – aber KEINE Anleitung, WIE man etwas macht. Arbeiten an Gasweg, Abgas und Elektrik nur durch den Fachbetrieb.',
+      'Mein Angebot: persönliche schriftliche Einschätzung (9,90 €) durch einen SHK-Kundendiensttechniker – nur auf Basis der Kundenangaben und Fotos. Grundsatz: Ich sage, was der Fehler bedeutet, welche Ursachen wahrscheinlich sind und WAS geprüft werden sollte – aber KEINE Anleitung, WIE man etwas macht. Arbeiten an Gasweg, Abgas und Elektrik nur durch den Fachbetrieb.',
       '',
       '— ANFRAGE DES KUNDEN —',
       'Anliegen: ' + (anliegen(r) || '–'),
